@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class TagihanIuran {
-  String id;
-  String namaAtlet;
-  String kelompokUmur;
-  String bulan;
-  int nominal;
+  final int id;
+  final String namaAtlet;
+  final String kelompokUmur;
+  final String bulan;
+  final int nominal;
   bool isLunas;
   String tanggalBayar;
 
@@ -18,6 +19,18 @@ class TagihanIuran {
     required this.isLunas,
     required this.tanggalBayar,
   });
+
+  factory TagihanIuran.fromMap(Map<String, dynamic> map) {
+    return TagihanIuran(
+      id: map['id'] ?? 0,
+      namaAtlet: map['nama_atlet'] ?? '-',
+      kelompokUmur: map['kelompok_umur'] ?? 'KU-1',
+      bulan: map['bulan'] ?? '-',
+      nominal: (map['nominal'] as num?)?.toInt() ?? 0,
+      isLunas: map['is_lunas'] == true,
+      tanggalBayar: map['tanggal_bayar'] ?? '-',
+    );
+  }
 }
 
 class IuranPage extends StatefulWidget {
@@ -28,48 +41,106 @@ class IuranPage extends StatefulWidget {
 }
 
 class _IuranPageState extends State<IuranPage> {
-  final List<TagihanIuran> _daftarTagihan = [
-    TagihanIuran(
-      id: 'INV-2026-001',
-      namaAtlet: 'Rafa Pratama',
-      kelompokUmur: 'KU-1',
-      bulan: 'November 2026',
-      nominal: 450000,
-      isLunas: true,
-      tanggalBayar: '03 Nov 2026',
-    ),
-    TagihanIuran(
-      id: 'INV-2026-002',
-      namaAtlet: 'Nadia Putri',
-      kelompokUmur: 'KU-2',
-      bulan: 'November 2026',
-      nominal: 450000,
-      isLunas: true,
-      tanggalBayar: '05 Nov 2026',
-    ),
-    TagihanIuran(
-      id: 'INV-2026-003',
-      namaAtlet: 'Dimas Anggara',
-      kelompokUmur: 'KU-1',
-      bulan: 'November 2026',
-      nominal: 450000,
-      isLunas: false,
-      tanggalBayar: '-',
-    ),
-    TagihanIuran(
-      id: 'INV-2026-004',
-      namaAtlet: 'Kenzo Wijaya',
-      kelompokUmur: 'Pemula',
-      bulan: 'November 2026',
-      nominal: 350000,
-      isLunas: false,
-      tanggalBayar: '-',
-    ),
-  ];
-
+  final _supabase = Supabase.instance.client;
+  List<TagihanIuran> _daftarTagihan = [];
+  bool _isLoading = true;
   String _filterStatus = 'Semua';
 
-  // Format angka menjadi Rupiah sederhana (contoh: 450000 -> Rp 450.000)
+  @override
+  void initState() {
+    super.initState();
+    _ambilDataTagihan();
+  }
+
+  Future<void> _ambilDataTagihan() async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await _supabase
+          .from('tagihan_iuran')
+          .select()
+          .order('id', ascending: false);
+
+      final List dataMentah = response as List;
+      setState(() {
+        _daftarTagihan = dataMentah.map((item) => TagihanIuran.fromMap(item)).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal memuat tagihan: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _simpanTagihanBaru({
+    required String nama,
+    required String ku,
+    required String bulan,
+    required int nominal,
+  }) async {
+    try {
+      await _supabase.from('tagihan_iuran').insert({
+        'nama_atlet': nama,
+        'kelompok_umur': ku,
+        'bulan': bulan,
+        'nominal': nominal,
+        'is_lunas': false,
+        'tanggal_bayar': '-',
+      });
+      await _ambilDataTagihan();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tagihan baru tersimpan ke cloud!'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal membuat tagihan: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _ubahStatusBayar(TagihanIuran tagihan) async {
+    final statusBaru = !tagihan.isLunas;
+    final now = DateTime.now();
+    final tglHariIni =
+        '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
+    final tglBayarBaru = statusBaru ? tglHariIni : '-';
+
+    try {
+      await _supabase.from('tagihan_iuran').update({
+        'is_lunas': statusBaru,
+        'tanggal_bayar': tglBayarBaru,
+      }).eq('id', tagihan.id);
+
+      await _ambilDataTagihan();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal memperbarui status: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _hapusTagihan(int id) async {
+    try {
+      await _supabase.from('tagihan_iuran').delete().eq('id', id);
+      await _ambilDataTagihan();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menghapus tagihan: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   String _formatRupiah(int angka) {
     final teks = angka.toString().replaceAllMapped(
       RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
@@ -130,7 +201,7 @@ class _IuranPageState extends State<IuranPage> {
                     DropdownButtonFormField<String>(
                       initialValue: pilihBulan,
                       decoration: const InputDecoration(labelText: 'Periode Bulan', border: OutlineInputBorder()),
-                      items: ['November 2026', 'Desember 2026']
+                      items: ['November 2026', 'Desember 2026', 'Januari 2027']
                           .map((bln) => DropdownMenuItem(value: bln, child: Text(bln)))
                           .toList(),
                       onChanged: (val) => setDialogState(() => pilihBulan = val!),
@@ -151,22 +222,13 @@ class _IuranPageState extends State<IuranPage> {
                   onPressed: () {
                     if (namaController.text.trim().isEmpty) return;
                     final nominal = int.tryParse(nominalController.text.trim()) ?? 450000;
-                    final nomor = (_daftarTagihan.length + 1).toString().padLeft(3, '0');
-
-                    setState(() {
-                      _daftarTagihan.add(
-                        TagihanIuran(
-                          id: 'INV-2026-$nomor',
-                          namaAtlet: namaController.text.trim(),
-                          kelompokUmur: pilihKU,
-                          bulan: pilihBulan,
-                          nominal: nominal,
-                          isLunas: false,
-                          tanggalBayar: '-',
-                        ),
-                      );
-                    });
                     Navigator.pop(context);
+                    _simpanTagihanBaru(
+                      nama: namaController.text.trim(),
+                      ku: pilihKU,
+                      bulan: pilihBulan,
+                      nominal: nominal,
+                    );
                   },
                   child: const Text('Simpan Tagihan'),
                 ),
@@ -178,13 +240,6 @@ class _IuranPageState extends State<IuranPage> {
     );
   }
 
-  void _ubahStatusBayar(TagihanIuran tagihan) {
-    setState(() {
-      tagihan.isLunas = !tagihan.isLunas;
-      tagihan.tanggalBayar = tagihan.isLunas ? '21 Nov 2026' : '-';
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final dataTampil = _tagihanTersaring;
@@ -194,7 +249,6 @@ class _IuranPageState extends State<IuranPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Kartu Ringkasan Keuangan
           Row(
             children: [
               _buildFinanceCard(
@@ -212,7 +266,7 @@ class _IuranPageState extends State<IuranPage> {
               ),
               const SizedBox(width: 20),
               _buildFinanceCard(
-                'Total Tagihan Bulan Ini',
+                'Total Tagihan Terdaftar',
                 '${_daftarTagihan.length} Tagihan',
                 Icons.receipt_long,
                 Colors.blue,
@@ -220,8 +274,6 @@ class _IuranPageState extends State<IuranPage> {
             ],
           ),
           const SizedBox(height: 28),
-
-          // Baris Filter & Tombol Buat Tagihan
           Row(
             children: [
               Container(
@@ -241,6 +293,12 @@ class _IuranPageState extends State<IuranPage> {
                   ),
                 ),
               ),
+              const SizedBox(width: 12),
+              IconButton(
+                onPressed: _ambilDataTagihan,
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Muat Ulang Tagihan',
+              ),
               const Spacer(),
               ElevatedButton.icon(
                 onPressed: _tambahTagihanBaru,
@@ -256,8 +314,6 @@ class _IuranPageState extends State<IuranPage> {
             ],
           ),
           const SizedBox(height: 20),
-
-          // Tabel Tagihan Iuran
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
@@ -265,69 +321,78 @@ class _IuranPageState extends State<IuranPage> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
-            child: DataTable(
-              headingRowColor: WidgetStateProperty.all(const Color(0xFFF1F5F9)),
-              columns: const [
-                DataColumn(label: Text('No. Invoice', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Nama Atlet', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('KU', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Periode', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Nominal', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Tgl Bayar', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Aksi Cepat', style: TextStyle(fontWeight: FontWeight.bold))),
-              ],
-              rows: dataTampil.map((item) {
-                return DataRow(
-                  cells: [
-                    DataCell(Text(item.id, style: const TextStyle(fontWeight: FontWeight.w500))),
-                    DataCell(Text(item.namaAtlet)),
-                    DataCell(Text(item.kelompokUmur)),
-                    DataCell(Text(item.bulan)),
-                    DataCell(Text(_formatRupiah(item.nominal), style: const TextStyle(fontWeight: FontWeight.bold))),
-                    DataCell(
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: item.isLunas ? Colors.green.shade50 : Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          item.isLunas ? 'Lunas' : 'Belum Lunas',
-                          style: TextStyle(
-                            color: item.isLunas ? Colors.green.shade700 : Colors.red.shade700,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ),
-                    DataCell(Text(item.tanggalBayar)),
-                    DataCell(
-                      Row(
-                        children: [
-                          OutlinedButton(
-                            onPressed: () => _ubahStatusBayar(item),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                              foregroundColor: item.isLunas ? Colors.grey.shade700 : Colors.green.shade700,
-                            ),
-                            child: Text(item.isLunas ? 'Batalkan' : 'Tandai Lunas', style: const TextStyle(fontSize: 12)),
-                          ),
-                          const SizedBox(width: 4),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                            onPressed: () {
-                              setState(() => _daftarTagihan.removeWhere((t) => t.id == item.id));
-                            },
-                          ),
+            child: _isLoading
+                ? const Padding(
+                    padding: EdgeInsets.all(48),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                : dataTampil.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(48),
+                        child: Center(child: Text('Belum ada data tagihan di database. Klik "Buat Tagihan Baru".')),
+                      )
+                    : DataTable(
+                        headingRowColor: WidgetStateProperty.all(const Color(0xFFF1F5F9)),
+                        columns: const [
+                          DataColumn(label: Text('No. Invoice', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Nama Atlet', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('KU', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Periode', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Nominal', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Tgl Bayar', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Aksi Cepat', style: TextStyle(fontWeight: FontWeight.bold))),
                         ],
+                        rows: dataTampil.map((item) {
+                          final kodeInv = 'INV-${item.id.toString().padLeft(3, '0')}';
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(kodeInv, style: const TextStyle(fontWeight: FontWeight.w500))),
+                              DataCell(Text(item.namaAtlet)),
+                              DataCell(Text(item.kelompokUmur)),
+                              DataCell(Text(item.bulan)),
+                              DataCell(Text(_formatRupiah(item.nominal), style: const TextStyle(fontWeight: FontWeight.bold))),
+                              DataCell(
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: item.isLunas ? Colors.green.shade50 : Colors.red.shade50,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    item.isLunas ? 'Lunas' : 'Belum Lunas',
+                                    style: TextStyle(
+                                      color: item.isLunas ? Colors.green.shade700 : Colors.red.shade700,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              DataCell(Text(item.tanggalBayar)),
+                              DataCell(
+                                Row(
+                                  children: [
+                                    OutlinedButton(
+                                      onPressed: () => _ubahStatusBayar(item),
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                        foregroundColor: item.isLunas ? Colors.grey.shade700 : Colors.green.shade700,
+                                      ),
+                                      child: Text(item.isLunas ? 'Batalkan' : 'Tandai Lunas', style: const TextStyle(fontSize: 12)),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                      onPressed: () => _hapusTagihan(item.id),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
                       ),
-                    ),
-                  ],
-                );
-              }).toList(),
-            ),
           ),
         ],
       ),

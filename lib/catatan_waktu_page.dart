@@ -1,6 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+class CatatanWaktu {
+  final int id;
+  final String namaAtlet;
+  final String kelompokUmur;
+  final String nomorLomba;
+  final double waktuDetik;
+  final String tanggalTes;
+
+  CatatanWaktu({
+    required this.id,
+    required this.namaAtlet,
+    required this.kelompokUmur,
+    required this.nomorLomba,
+    required this.waktuDetik,
+    required this.tanggalTes,
+  });
+
+  factory CatatanWaktu.fromMap(Map<String, dynamic> map) {
+    return CatatanWaktu(
+      id: map['id'] ?? 0,
+      namaAtlet: map['nama_atlet'] ?? '-',
+      kelompokUmur: map['kelompok_umur'] ?? '-',
+      nomorLomba: map['nomor_lomba'] ?? '-',
+      waktuDetik: (map['waktu_detik'] as num?)?.toDouble() ?? 0.0,
+      tanggalTes: map['tanggal_tes'] ?? '-',
+    );
+  }
+}
+
 class CatatanWaktuPage extends StatefulWidget {
   const CatatanWaktuPage({super.key});
 
@@ -10,7 +39,7 @@ class CatatanWaktuPage extends StatefulWidget {
 
 class _CatatanWaktuPageState extends State<CatatanWaktuPage> {
   final _supabase = Supabase.instance.client;
-  List> _daftarWaktu = [];
+  List<CatatanWaktu> _daftarWaktu = [];
   bool _isLoading = true;
   String _filterNomor = 'Semua';
 
@@ -29,7 +58,6 @@ class _CatatanWaktuPageState extends State<CatatanWaktuPage> {
     _ambilDataDariDatabase();
   }
 
-  // Mengambil data dari tabel Supabase
   Future<void> _ambilDataDariDatabase() async {
     setState(() => _isLoading = true);
     try {
@@ -38,8 +66,9 @@ class _CatatanWaktuPageState extends State<CatatanWaktuPage> {
           .select()
           .order('waktu_detik', ascending: true);
 
+      final List dataMentah = response as List;
       setState(() {
-        _daftarWaktu = List>.from(response);
+        _daftarWaktu = dataMentah.map((item) => CatatanWaktu.fromMap(item)).toList();
         _isLoading = false;
       });
     } catch (e) {
@@ -52,7 +81,6 @@ class _CatatanWaktuPageState extends State<CatatanWaktuPage> {
     }
   }
 
-  // Menyimpan data baru ke Supabase
   Future<void> _simpanKeDatabase({
     required String nama,
     required String ku,
@@ -71,7 +99,10 @@ class _CatatanWaktuPageState extends State<CatatanWaktuPage> {
       await _ambilDataDariDatabase();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Catatan waktu berhasil disimpan ke cloud!'), backgroundColor: Colors.green),
+          const SnackBar(
+            content: Text('Catatan waktu berhasil disimpan ke cloud!'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
@@ -83,7 +114,6 @@ class _CatatanWaktuPageState extends State<CatatanWaktuPage> {
     }
   }
 
-  // Menghapus data dari Supabase
   Future<void> _hapusDariDatabase(int id) async {
     try {
       await _supabase.from('catatan_waktu').delete().eq('id', id);
@@ -97,9 +127,9 @@ class _CatatanWaktuPageState extends State<CatatanWaktuPage> {
     }
   }
 
-  List> get _dataTersaring {
+  List<CatatanWaktu> get _dataTersaring {
     if (_filterNomor == 'Semua') return _daftarWaktu;
-    return _daftarWaktu.where((item) => item['nomor_lomba'] == _filterNomor).toList();
+    return _daftarWaktu.where((item) => item.nomorLomba == _filterNomor).toList();
   }
 
   void _tampilkanFormInput() {
@@ -172,7 +202,10 @@ class _CatatanWaktuPageState extends State<CatatanWaktuPage> {
               actions: [
                 TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0284C7), foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0284C7),
+                    foregroundColor: Colors.white,
+                  ),
                   onPressed: () {
                     final nama = namaController.text.trim();
                     final waktu = double.tryParse(waktuController.text.trim().replaceAll(',', '.'));
@@ -206,7 +239,6 @@ class _CatatanWaktuPageState extends State<CatatanWaktuPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Baris Filter & Aksi
           Row(
             children: [
               Container(
@@ -247,8 +279,6 @@ class _CatatanWaktuPageState extends State<CatatanWaktuPage> {
             ],
           ),
           const SizedBox(height: 24),
-
-          // Tabel Data Catatan Waktu
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
@@ -310,12 +340,12 @@ class _CatatanWaktuPageState extends State<CatatanWaktuPage> {
                                   ],
                                 ),
                               ),
-                              DataCell(Text(item['nama_atlet'] ?? '-')),
-                              DataCell(Text(item['kelompok_umur'] ?? '-')),
-                              DataCell(Text(item['nomor_lomba'] ?? '-')),
+                              DataCell(Text(item.namaAtlet)),
+                              DataCell(Text(item.kelompokUmur)),
+                              DataCell(Text(item.nomorLomba)),
                               DataCell(
                                 Text(
-                                  '${item['waktu_detik']} dtk',
+                                  '${item.waktuDetik} dtk',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: Color(0xFF0284C7),
@@ -323,12 +353,12 @@ class _CatatanWaktuPageState extends State<CatatanWaktuPage> {
                                   ),
                                 ),
                               ),
-                              DataCell(Text(item['tanggal_tes'] ?? '-')),
+                              DataCell(Text(item.tanggalTes)),
                               DataCell(
                                 IconButton(
                                   icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
                                   tooltip: 'Hapus dari Database',
-                                  onPressed: () => _hapusDariDatabase(item['id']),
+                                  onPressed: () => _hapusDariDatabase(item.id),
                                 ),
                               ),
                             ],

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-// Cetakan (Model) Data Atlet
 class Atlet {
-  String id;
+  final int id;
   String nama;
   String kelompokUmur;
   String gayaUtama;
@@ -15,6 +15,16 @@ class Atlet {
     required this.gayaUtama,
     required this.status,
   });
+
+  factory Atlet.fromMap(Map<String, dynamic> map) {
+    return Atlet(
+      id: map['id'] ?? 0,
+      nama: map['nama'] ?? '-',
+      kelompokUmur: map['kelompok_umur'] ?? 'KU-1',
+      gayaUtama: map['gaya_utama'] ?? 'Gaya Bebas',
+      status: map['status'] ?? 'Aktif',
+    );
+  }
 }
 
 class AtletPage extends StatefulWidget {
@@ -25,14 +35,9 @@ class AtletPage extends StatefulWidget {
 }
 
 class _AtletPageState extends State<AtletPage> {
-  // Data awal tiruan (Dummy Data) sebelum terhubung ke database
-  final List<Atlet> _daftarAtlet = [
-    Atlet(id: 'ATL-001', nama: 'Rafa Pratama', kelompokUmur: 'KU-1', gayaUtama: 'Gaya Bebas', status: 'Aktif'),
-    Atlet(id: 'ATL-002', nama: 'Nadia Putri', kelompokUmur: 'KU-2', gayaUtama: 'Gaya Kupu-kupu', status: 'Aktif'),
-    Atlet(id: 'ATL-003', nama: 'Dimas Anggara', kelompokUmur: 'KU-1', gayaUtama: 'Gaya Dada', status: 'Aktif'),
-    Atlet(id: 'ATL-004', nama: 'Zahra Aulia', kelompokUmur: 'KU-3', gayaUtama: 'Gaya Punggung', status: 'Cuti'),
-    Atlet(id: 'ATL-005', nama: 'Kenzo Wijaya', kelompokUmur: 'Pemula', gayaUtama: 'Gaya Bebas', status: 'Aktif'),
-  ];
+  final _supabase = Supabase.instance.client;
+  List<Atlet> _daftarAtlet = [];
+  bool _isLoading = true;
 
   String _kataKunciCari = '';
   String _filterKU = 'Semua';
@@ -41,17 +46,105 @@ class _AtletPageState extends State<AtletPage> {
   final List<String> _opsiGaya = ['Gaya Bebas', 'Gaya Dada', 'Gaya Punggung', 'Gaya Kupu-kupu'];
   final List<String> _opsiStatus = ['Aktif', 'Cuti'];
 
-  // Menyaring daftar atlet berdasarkan pencarian & filter KU
+  @override
+  void initState() {
+    super.initState();
+    _ambilDataAtlet();
+  }
+
+  // Membaca data atlet dari Supabase
+  Future<void> _ambilDataAtlet() async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await _supabase
+          .from('atlet')
+          .select()
+          .order('id', ascending: true);
+
+      final List dataMentah = response as List;
+      setState(() {
+        _daftarAtlet = dataMentah.map((item) => Atlet.fromMap(item)).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal memuat data atlet: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  // Menyimpan atlet baru atau memperbarui data atlet ke Supabase
+  Future<void> _simpanKeDatabase({
+    Atlet? atletEdit,
+    required String nama,
+    required String ku,
+    required String gaya,
+    required String status,
+  }) async {
+    try {
+      final dataKirim = {
+        'nama': nama,
+        'kelompok_umur': ku,
+        'gaya_utama': gaya,
+        'status': status,
+      };
+
+      if (atletEdit != null) {
+        await _supabase.from('atlet').update(dataKirim).eq('id', atletEdit.id);
+      } else {
+        await _supabase.from('atlet').insert(dataKirim);
+      }
+
+      await _ambilDataAtlet();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(atletEdit != null ? 'Data atlet diperbarui!' : 'Atlet baru berhasil ditambahkan!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menyimpan data: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  // Menghapus atlet dari Supabase
+  Future<void> _hapusAtlet(Atlet atlet) async {
+    try {
+      await _supabase.from('atlet').delete().eq('id', atlet.id);
+      await _ambilDataAtlet();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Data ${atlet.nama} berhasil dihapus')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menghapus: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   List<Atlet> get _atletTersaring {
     return _daftarAtlet.where((atlet) {
+      final kodeAtlet = 'ATL-${atlet.id.toString().padLeft(3, '0')}';
       final cocokNama = atlet.nama.toLowerCase().contains(_kataKunciCari.toLowerCase()) ||
-          atlet.id.toLowerCase().contains(_kataKunciCari.toLowerCase());
+          kodeAtlet.toLowerCase().contains(_kataKunciCari.toLowerCase());
       final cocokKU = _filterKU == 'Semua' || atlet.kelompokUmur == _filterKU;
       return cocokNama && cocokKU;
     }).toList();
   }
 
-  // Menampilkan Dialog Form untuk Tambah atau Edit Atlet
   void _tampilkanFormAtlet({Atlet? atletEdit}) {
     final isEdit = atletEdit != null;
     final namaController = TextEditingController(text: isEdit ? atletEdit.nama : '');
@@ -124,27 +217,14 @@ class _AtletPageState extends State<AtletPage> {
                   ),
                   onPressed: () {
                     if (namaController.text.trim().isEmpty) return;
-
-                    setState(() {
-                      if (isEdit) {
-                        atletEdit.nama = namaController.text.trim();
-                        atletEdit.kelompokUmur = pilihKU;
-                        atletEdit.gayaUtama = pilihGaya;
-                        atletEdit.status = pilihStatus;
-                      } else {
-                        final nomorBaru = (_daftarAtlet.length + 1).toString().padLeft(3, '0');
-                        _daftarAtlet.add(
-                          Atlet(
-                            id: 'ATL-$nomorBaru',
-                            nama: namaController.text.trim(),
-                            kelompokUmur: pilihKU,
-                            gayaUtama: pilihGaya,
-                            status: pilihStatus,
-                          ),
-                        );
-                      }
-                    });
                     Navigator.pop(context);
+                    _simpanKeDatabase(
+                      atletEdit: atletEdit,
+                      nama: namaController.text.trim(),
+                      ku: pilihKU,
+                      gaya: pilihGaya,
+                      status: pilihStatus,
+                    );
                   },
                   child: Text(isEdit ? 'Simpan Perubahan' : 'Simpan Atlet'),
                 ),
@@ -153,16 +233,6 @@ class _AtletPageState extends State<AtletPage> {
           },
         );
       },
-    );
-  }
-
-  // Menghapus data atlet
-  void _hapusAtlet(Atlet atlet) {
-    setState(() {
-      _daftarAtlet.removeWhere((item) => item.id == atlet.id);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Data ${atlet.nama} berhasil dihapus')),
     );
   }
 
@@ -175,12 +245,8 @@ class _AtletPageState extends State<AtletPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ==========================================
-          // BARIS PENCARIAN, FILTER, & TOMBOL TAMBAH
-          // ==========================================
           Row(
             children: [
-              // Kolom Pencarian
               SizedBox(
                 width: 300,
                 child: TextField(
@@ -199,8 +265,6 @@ class _AtletPageState extends State<AtletPage> {
                 ),
               ),
               const SizedBox(width: 16),
-
-              // Dropdown Filter Kelompok Umur
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
@@ -218,9 +282,13 @@ class _AtletPageState extends State<AtletPage> {
                   ),
                 ),
               ),
+              const SizedBox(width: 12),
+              IconButton(
+                onPressed: _ambilDataAtlet,
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Muat Ulang Data',
+              ),
               const Spacer(),
-
-              // Tombol Tambah Atlet
               ElevatedButton.icon(
                 onPressed: () => _tampilkanFormAtlet(),
                 icon: const Icon(Icons.person_add, size: 18),
@@ -235,10 +303,6 @@ class _AtletPageState extends State<AtletPage> {
             ],
           ),
           const SizedBox(height: 24),
-
-          // ==========================================
-          // TABEL DATA ATLET
-          // ==========================================
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
@@ -246,66 +310,72 @@ class _AtletPageState extends State<AtletPage> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
-            child: dataTampil.isEmpty
+            child: _isLoading
                 ? const Padding(
-                    padding: EdgeInsets.all(40),
-                    child: Center(child: Text('Tidak ada data atlet yang sesuai.')),
+                    padding: EdgeInsets.all(48),
+                    child: Center(child: CircularProgressIndicator()),
                   )
-                : DataTable(
-                    headingRowColor: WidgetStateProperty.all(const Color(0xFFF1F5F9)),
-                    columns: const [
-                      DataColumn(label: Text('ID Atlet', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Nama Lengkap', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Kelompok Umur', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Gaya Spesialis', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('Aksi', style: TextStyle(fontWeight: FontWeight.bold))),
-                    ],
-                    rows: dataTampil.map((atlet) {
-                      final isAktif = atlet.status == 'Aktif';
-                      return DataRow(
-                        cells: [
-                          DataCell(Text(atlet.id, style: const TextStyle(fontWeight: FontWeight.w500))),
-                          DataCell(Text(atlet.nama)),
-                          DataCell(Text(atlet.kelompokUmur)),
-                          DataCell(Text(atlet.gayaUtama)),
-                          DataCell(
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: isAktif ? Colors.green.shade50 : Colors.orange.shade50,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                atlet.status,
-                                style: TextStyle(
-                                  color: isAktif ? Colors.green.shade700 : Colors.orange.shade700,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ),
-                          DataCell(
-                            Row(
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20),
-                                  tooltip: 'Edit',
-                                  onPressed: () => _tampilkanFormAtlet(atletEdit: atlet),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                                  tooltip: 'Hapus',
-                                  onPressed: () => _hapusAtlet(atlet),
-                                ),
-                              ],
-                            ),
-                          ),
+                : dataTampil.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(40),
+                        child: Center(child: Text('Belum ada data atlet di database. Klik "Tambah Atlet" untuk memulai.')),
+                      )
+                    : DataTable(
+                        headingRowColor: WidgetStateProperty.all(const Color(0xFFF1F5F9)),
+                        columns: const [
+                          DataColumn(label: Text('ID Atlet', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Nama Lengkap', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Kelompok Umur', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Gaya Spesialis', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Aksi', style: TextStyle(fontWeight: FontWeight.bold))),
                         ],
-                      );
-                    }).toList(),
-                  ),
+                        rows: dataTampil.map((atlet) {
+                          final isAktif = atlet.status == 'Aktif';
+                          final kodeAtlet = 'ATL-${atlet.id.toString().padLeft(3, '0')}';
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(kodeAtlet, style: const TextStyle(fontWeight: FontWeight.w500))),
+                              DataCell(Text(atlet.nama)),
+                              DataCell(Text(atlet.kelompokUmur)),
+                              DataCell(Text(atlet.gayaUtama)),
+                              DataCell(
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: isAktif ? Colors.green.shade50 : Colors.orange.shade50,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    atlet.status,
+                                    style: TextStyle(
+                                      color: isAktif ? Colors.green.shade700 : Colors.orange.shade700,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20),
+                                      tooltip: 'Edit',
+                                      onPressed: () => _tampilkanFormAtlet(atletEdit: atlet),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                      tooltip: 'Hapus',
+                                      onPressed: () => _hapusAtlet(atlet),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
+                      ),
           ),
         ],
       ),

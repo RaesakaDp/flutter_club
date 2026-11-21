@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class JadwalLatihan {
-  String id;
+  final int id;
   String hari;
   String jam;
   String kelompok;
@@ -20,6 +21,19 @@ class JadwalLatihan {
     required this.kolam,
     required this.status,
   });
+
+  factory JadwalLatihan.fromMap(Map<String, dynamic> map) {
+    return JadwalLatihan(
+      id: map['id'] ?? 0,
+      hari: map['hari'] ?? 'Senin',
+      jam: map['jam'] ?? '-',
+      kelompok: map['kelompok'] ?? '-',
+      materi: map['materi'] ?? '-',
+      pelatih: map['pelatih'] ?? '-',
+      kolam: map['kolam'] ?? '-',
+      status: map['status'] ?? 'Terjadwal',
+    );
+  }
 }
 
 class JadwalPage extends StatefulWidget {
@@ -30,42 +44,100 @@ class JadwalPage extends StatefulWidget {
 }
 
 class _JadwalPageState extends State<JadwalPage> {
-  final List<JadwalLatihan> _daftarJadwal = [
-    JadwalLatihan(
-      id: 'JDW-01',
-      hari: 'Senin',
-      jam: '15:30 - 17:30 WIB',
-      kelompok: 'KU-1 & KU-2 (Prestasi)',
-      materi: 'Endurance Gaya Bebas & Kupu-kupu',
-      pelatih: 'Coach Budi',
-      kolam: 'Kolam Utama (Lintasan 1-4)',
-      status: 'Terjadwal',
-    ),
-    JadwalLatihan(
-      id: 'JDW-02',
-      hari: 'Rabu',
-      jam: '16:00 - 17:15 WIB',
-      kelompok: 'Pemula',
-      materi: 'Teknik Pernapasan & Meluncur',
-      pelatih: 'Coach Sari',
-      kolam: 'Kolam Latih',
-      status: 'Berlangsung',
-    ),
-    JadwalLatihan(
-      id: 'JDW-03',
-      hari: 'Sabtu',
-      jam: '07:00 - 09:30 WIB',
-      kelompok: 'Semua KU',
-      materi: 'Simulasi Lomba & Time Trial 50m/100m',
-      pelatih: 'Coach Budi & Tim',
-      kolam: 'Kolam Utama (Semua Lintasan)',
-      status: 'Terjadwal',
-    ),
-  ];
+  final _supabase = Supabase.instance.client;
+  List<JadwalLatihan> _daftarJadwal = [];
+  bool _isLoading = true;
 
   String _filterHari = 'Semua';
   final List<String> _opsiHari = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
   final List<String> _opsiStatus = ['Terjadwal', 'Berlangsung', 'Selesai'];
+
+  @override
+  void initState() {
+    super.initState();
+    _ambilDataJadwal();
+  }
+
+  Future<void> _ambilDataJadwal() async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await _supabase
+          .from('jadwal_latihan')
+          .select()
+          .order('id', ascending: true);
+
+      final List dataMentah = response as List;
+      setState(() {
+        _daftarJadwal = dataMentah.map((item) => JadwalLatihan.fromMap(item)).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal memuat jadwal: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _simpanJadwal({
+    JadwalLatihan? jadwalEdit,
+    required String hari,
+    required String jam,
+    required String kelompok,
+    required String materi,
+    required String pelatih,
+    required String kolam,
+    required String status,
+  }) async {
+    try {
+      final dataKirim = {
+        'hari': hari,
+        'jam': jam,
+        'kelompok': kelompok,
+        'materi': materi,
+        'pelatih': pelatih,
+        'kolam': kolam,
+        'status': status,
+      };
+
+      if (jadwalEdit != null) {
+        await _supabase.from('jadwal_latihan').update(dataKirim).eq('id', jadwalEdit.id);
+      } else {
+        await _supabase.from('jadwal_latihan').insert(dataKirim);
+      }
+
+      await _ambilDataJadwal();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(jadwalEdit != null ? 'Jadwal diperbarui!' : 'Jadwal baru tersimpan ke cloud!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menyimpan jadwal: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _hapusJadwal(int id) async {
+    try {
+      await _supabase.from('jadwal_latihan').delete().eq('id', id);
+      await _ambilDataJadwal();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menghapus jadwal: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
 
   List<JadwalLatihan> get _jadwalTersaring {
     if (_filterHari == 'Semua') return _daftarJadwal;
@@ -143,33 +215,17 @@ class _JadwalPageState extends State<JadwalPage> {
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0284C7), foregroundColor: Colors.white),
                   onPressed: () {
                     if (kelompokController.text.trim().isEmpty || materiController.text.trim().isEmpty) return;
-
-                    setState(() {
-                      if (isEdit) {
-                        jadwalEdit.hari = pilihHari;
-                        jadwalEdit.jam = jamController.text.trim();
-                        jadwalEdit.kelompok = kelompokController.text.trim();
-                        jadwalEdit.materi = materiController.text.trim();
-                        jadwalEdit.pelatih = pelatihController.text.trim();
-                        jadwalEdit.kolam = kolamController.text.trim();
-                        jadwalEdit.status = pilihStatus;
-                      } else {
-                        final nomor = (_daftarJadwal.length + 1).toString().padLeft(2, '0');
-                        _daftarJadwal.add(
-                          JadwalLatihan(
-                            id: 'JDW-$nomor',
-                            hari: pilihHari,
-                            jam: jamController.text.trim(),
-                            kelompok: kelompokController.text.trim(),
-                            materi: materiController.text.trim(),
-                            pelatih: pelatihController.text.trim(),
-                            kolam: kolamController.text.trim(),
-                            status: pilihStatus,
-                          ),
-                        );
-                      }
-                    });
                     Navigator.pop(context);
+                    _simpanJadwal(
+                      jadwalEdit: jadwalEdit,
+                      hari: pilihHari,
+                      jam: jamController.text.trim(),
+                      kelompok: kelompokController.text.trim(),
+                      materi: materiController.text.trim(),
+                      pelatih: pelatihController.text.trim(),
+                      kolam: kolamController.text.trim(),
+                      status: pilihStatus,
+                    );
                   },
                   child: Text(isEdit ? 'Simpan Perubahan' : 'Tambah Jadwal'),
                 ),
@@ -190,7 +246,6 @@ class _JadwalPageState extends State<JadwalPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Baris Filter Hari & Tombol Tambah
           Row(
             children: [
               Container(
@@ -210,6 +265,12 @@ class _JadwalPageState extends State<JadwalPage> {
                   ),
                 ),
               ),
+              const SizedBox(width: 12),
+              IconButton(
+                onPressed: _ambilDataJadwal,
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Muat Ulang Jadwal',
+              ),
               const Spacer(),
               ElevatedButton.icon(
                 onPressed: () => _tampilkanFormJadwal(),
@@ -225,9 +286,12 @@ class _JadwalPageState extends State<JadwalPage> {
             ],
           ),
           const SizedBox(height: 24),
-
-          // Daftar Kartu Jadwal Latihan
-          if (dataTampil.isEmpty)
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.all(48),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (dataTampil.isEmpty)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(40),
@@ -236,7 +300,7 @@ class _JadwalPageState extends State<JadwalPage> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
-              child: const Center(child: Text('Belum ada jadwal latihan pada hari tersebut.')),
+              child: const Center(child: Text('Belum ada jadwal latihan di database. Klik "Tambah Jadwal" untuk memulai.')),
             )
           else
             ListView.separated(
@@ -260,7 +324,6 @@ class _JadwalPageState extends State<JadwalPage> {
                   ),
                   child: Row(
                     children: [
-                      // Kotak Hari & Jam
                       Container(
                         width: 160,
                         padding: const EdgeInsets.all(14),
@@ -288,8 +351,6 @@ class _JadwalPageState extends State<JadwalPage> {
                         ),
                       ),
                       const SizedBox(width: 24),
-
-                      // Detail Materi & Pelatih
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -329,8 +390,6 @@ class _JadwalPageState extends State<JadwalPage> {
                           ],
                         ),
                       ),
-
-                      // Status & Tombol Aksi
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
@@ -355,9 +414,7 @@ class _JadwalPageState extends State<JadwalPage> {
                       IconButton(
                         icon: const Icon(Icons.delete_outline, color: Colors.red),
                         tooltip: 'Hapus Jadwal',
-                        onPressed: () {
-                          setState(() => _daftarJadwal.removeWhere((item) => item.id == jadwal.id));
-                        },
+                        onPressed: () => _hapusJadwal(jadwal.id),
                       ),
                     ],
                   ),
