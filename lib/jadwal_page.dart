@@ -22,7 +22,7 @@ class JadwalLatihan {
     required this.status,
   });
 
-  factory JadwalLatihan.fromMap(Map<String, dynamic> map) {
+  factory JadwalLatihan.fromMap(Map map) {
     return JadwalLatihan(
       id: map['id'] ?? 0,
       hari: map['hari'] ?? 'Senin',
@@ -161,8 +161,8 @@ class _JadwalPageState extends State<JadwalPage> {
           builder: (context, setDialogState) {
             return AlertDialog(
               title: Text(isEdit ? 'Edit Jadwal Latihan' : 'Tambah Jadwal Latihan'),
-              content: SizedBox(
-                width: 450,
+              content: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -241,188 +241,327 @@ class _JadwalPageState extends State<JadwalPage> {
   Widget build(BuildContext context) {
     final dataTampil = _jadwalTersaring;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFF94A3B8)),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _filterHari,
-                    items: ['Semua', ..._opsiHari]
-                        .map((hari) => DropdownMenuItem(value: hari, child: Text('Hari: $hari')))
-                        .toList(),
-                    onChanged: (val) => setState(() => _filterHari = val!),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              IconButton(
-                onPressed: _ambilDataJadwal,
-                icon: const Icon(Icons.refresh),
-                tooltip: 'Muat Ulang Jadwal',
-              ),
-              const Spacer(),
-              ElevatedButton.icon(
-                onPressed: () => _tampilkanFormJadwal(),
-                icon: const Icon(Icons.add_alarm, size: 18),
-                label: const Text('Tambah Jadwal'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0284C7),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(48),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (dataTampil.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(40),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: const Center(child: Text('Belum ada jadwal latihan di database. Klik "Tambah Jadwal" untuk memulai.')),
-            )
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: dataTampil.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 16),
-              itemBuilder: (context, index) {
-                final jadwal = dataTampil[index];
-                final isBerlangsung = jadwal.status == 'Berlangsung';
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 720;
 
-                return Container(
-                  padding: const EdgeInsets.all(20),
+        return SingleChildScrollView(
+          padding: EdgeInsets.all(isMobile ? 16 : 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Filter & Tombol Tambah Responsif
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF94A3B8)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _filterHari,
+                        items: ['Semua', ..._opsiHari]
+                            .map((hari) => DropdownMenuItem(value: hari, child: Text('Hari: $hari')))
+                            .toList(),
+                        onChanged: (val) => setState(() => _filterHari = val!),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _ambilDataJadwal,
+                    icon: const Icon(Icons.refresh),
+                    tooltip: 'Muat Ulang Jadwal',
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => _tampilkanFormJadwal(),
+                    icon: const Icon(Icons.add_alarm, size: 18),
+                    label: const Text('Tambah Jadwal'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0284C7),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              if (_isLoading)
+                const Padding(
+                  padding: EdgeInsets.all(48),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (dataTampil.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(40),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isBerlangsung ? const Color(0xFF0284C7) : const Color(0xFFE2E8F0),
-                      width: isBerlangsung ? 1.5 : 1,
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Belum ada jadwal latihan di database. Klik "Tambah Jadwal" untuk memulai.',
+                      textAlign: TextAlign.center,
                     ),
                   ),
-                  child: Row(
+                )
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: dataTampil.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 14),
+                  itemBuilder: (context, index) {
+                    final jadwal = dataTampil[index];
+                    final isBerlangsung = jadwal.status == 'Berlangsung';
+
+                    return Container(
+                      padding: EdgeInsets.all(isMobile ? 16 : 20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isBerlangsung ? const Color(0xFF0284C7) : const Color(0xFFE2E8F0),
+                          width: isBerlangsung ? 1.5 : 1,
+                        ),
+                      ),
+                      child: isMobile
+                          ? _buildKartuJadwalMobile(jadwal, isBerlangsung)
+                          : _buildKartuJadwalDesktop(jadwal, isBerlangsung),
+                    );
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildKartuJadwalMobile(JadwalLatihan jadwal, bool isBerlangsung) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0F9FF),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '${jadwal.hari} • ${jadwal.jam}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0284C7),
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: isBerlangsung ? Colors.blue.shade50 : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                jadwal.status,
+                style: TextStyle(
+                  color: isBerlangsung ? Colors.blue.shade700 : Colors.grey.shade700,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                jadwal.kelompok,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+            Text(
+              jadwal.materi,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 16,
+          runSpacing: 4,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.pool, size: 15, color: Colors.grey),
+                const SizedBox(width: 5),
+                Text(jadwal.kolam, style: const TextStyle(color: Colors.grey, fontSize: 12.5)),
+              ],
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.sports, size: 15, color: Colors.grey),
+                const SizedBox(width: 5),
+                Text(jadwal.pelatih, style: const TextStyle(color: Colors.grey, fontSize: 12.5)),
+              ],
+            ),
+          ],
+        ),
+        const Divider(height: 20),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton.icon(
+              onPressed: () => _tampilkanFormJadwal(jadwalEdit: jadwal),
+              icon: const Icon(Icons.edit_outlined, size: 18, color: Colors.blue),
+              label: const Text('Edit', style: TextStyle(color: Colors.blue)),
+            ),
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: () => _hapusJadwal(jadwal.id),
+              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+              label: const Text('Hapus', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildKartuJadwalDesktop(JadwalLatihan jadwal, bool isBerlangsung) {
+    return Row(
+      children: [
+        Container(
+          width: 165,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF0F9FF),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                jadwal.hari,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0284C7),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                jadwal.jam,
+                style: const TextStyle(fontSize: 12, color: Color(0xFF334155)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 24),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 10,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      jadwal.kelompok,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  Text(
+                    jadwal.materi,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 20,
+                runSpacing: 4,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        width: 160,
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF0F9FF),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              jadwal.hari,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF0284C7),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              jadwal.jam,
-                              style: const TextStyle(fontSize: 12, color: Color(0xFF334155)),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 24),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF1F5F9),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    jadwal.kelompok,
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Text(
-                                  jadwal.materi,
-                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                const Icon(Icons.pool, size: 16, color: Colors.grey),
-                                const SizedBox(width: 6),
-                                Text(jadwal.kolam, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                                const SizedBox(width: 20),
-                                const Icon(Icons.sports, size: 16, color: Colors.grey),
-                                const SizedBox(width: 6),
-                                Text(jadwal.pelatih, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: isBerlangsung ? Colors.blue.shade50 : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          jadwal.status,
-                          style: TextStyle(
-                            color: isBerlangsung ? Colors.blue.shade700 : Colors.grey.shade700,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined, color: Colors.blue),
-                        tooltip: 'Edit Jadwal',
-                        onPressed: () => _tampilkanFormJadwal(jadwalEdit: jadwal),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.red),
-                        tooltip: 'Hapus Jadwal',
-                        onPressed: () => _hapusJadwal(jadwal.id),
-                      ),
+                      const Icon(Icons.pool, size: 16, color: Colors.grey),
+                      const SizedBox(width: 6),
+                      Text(jadwal.kolam, style: const TextStyle(color: Colors.grey, fontSize: 13)),
                     ],
                   ),
-                );
-              },
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.sports, size: 16, color: Colors.grey),
+                      const SizedBox(width: 6),
+                      Text(jadwal.pelatih, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isBerlangsung ? Colors.blue.shade50 : Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            jadwal.status,
+            style: TextStyle(
+              color: isBerlangsung ? Colors.blue.shade700 : Colors.grey.shade700,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
             ),
-        ],
-      ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        IconButton(
+          icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+          tooltip: 'Edit Jadwal',
+          onPressed: () => _tampilkanFormJadwal(jadwalEdit: jadwal),
+        ),
+        IconButton(
+          icon: const Icon(Icons.delete_outline, color: Colors.red),
+          tooltip: 'Hapus Jadwal',
+          onPressed: () => _hapusJadwal(jadwal.id),
+        ),
+      ],
     );
   }
 }
