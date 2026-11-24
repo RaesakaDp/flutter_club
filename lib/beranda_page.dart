@@ -13,9 +13,9 @@ class _BerandaPageState extends State<BerandaPage> {
   bool _isLoading = true;
 
   int _atletAktif = 0;
-  int _totalAtlet = 0;
-  int _totalJadwal = 0;
-  int _jadwalAktif = 0;
+  int _atletPrestasi = 0;
+  int _pelatihAktif = 0;
+  int _totalPelatih = 0;
   int _pemasukanLunas = 0;
   int _tagihanBelumLunas = 0;
   int _totalCatatanWaktu = 0;
@@ -34,26 +34,29 @@ class _BerandaPageState extends State<BerandaPage> {
     try {
       final results = await Future.wait([
         _supabase.from('atlet').select(),
+        _supabase.from('pelatih').select(),
         _supabase.from('jadwal_latihan').select().order('id', ascending: true),
         _supabase.from('tagihan_iuran').select(),
         _supabase.from('catatan_waktu').select().order('id', ascending: false),
       ]);
 
       final listAtlet = results[0] as List;
-      final listJadwal = results[1] as List;
-      final listIuran = results[2] as List;
-      final listWaktu = results[3] as List;
+      final listPelatih = results[1] as List;
+      final listJadwal = results[2] as List;
+      final listIuran = results[3] as List;
+      final listWaktu = results[4] as List;
 
       int hitungAktif = 0;
+      int hitungPrestasi = 0;
       for (var a in listAtlet) {
         if (a['status'] == 'Aktif') hitungAktif++;
+        final kelas = (a['kelas_latihan'] ?? '').toString();
+        if (kelas.contains('Prestasi')) hitungPrestasi++;
       }
 
-      int hitungJadwalAktif = 0;
-      for (var j in listJadwal) {
-        if (j['status'] == 'Berlangsung' || j['status'] == 'Terjadwal') {
-          hitungJadwalAktif++;
-        }
+      int hitungPelatihAktif = 0;
+      for (var p in listPelatih) {
+        if (p['status'] == 'Aktif') hitungPelatihAktif++;
       }
 
       int sumLunas = 0;
@@ -67,10 +70,10 @@ class _BerandaPageState extends State<BerandaPage> {
       }
 
       setState(() {
-        _totalAtlet = listAtlet.length;
         _atletAktif = hitungAktif;
-        _totalJadwal = listJadwal.length;
-        _jadwalAktif = hitungJadwalAktif;
+        _atletPrestasi = hitungPrestasi;
+        _totalPelatih = listPelatih.length;
+        _pelatihAktif = hitungPelatihAktif;
         _pemasukanLunas = sumLunas;
         _tagihanBelumLunas = countTunggakan;
         _totalCatatanWaktu = listWaktu.length;
@@ -109,16 +112,23 @@ class _BerandaPageState extends State<BerandaPage> {
           _buildStatCard(
             judul: 'Atlet Aktif',
             nilai: '$_atletAktif Atlet',
-            subjudul: 'Dari total $_totalAtlet terdaftar',
+            subjudul: '$_atletPrestasi atlet kelas prestasi',
             ikon: Icons.pool,
             warna: const Color(0xFF0284C7),
           ),
           _buildStatCard(
-            judul: 'Sesi Latihan',
-            nilai: '$_totalJadwal Sesi',
-            subjudul: '$_jadwalAktif sesi aktif/terjadwal',
-            ikon: Icons.calendar_today,
+            judul: 'Tim Pelatih',
+            nilai: '$_pelatihAktif Pelatih',
+            subjudul: 'Dari total $_totalPelatih terdaftar',
+            ikon: Icons.sports,
             warna: Colors.indigo,
+          ),
+          _buildStatCard(
+            judul: 'Catatan Limit Waktu',
+            nilai: '$_totalCatatanWaktu Rekor',
+            subjudul: 'Tersimpan di database',
+            ikon: Icons.timer,
+            warna: Colors.orange,
           ),
           _buildStatCard(
             judul: 'Iuran Terkumpul',
@@ -127,13 +137,6 @@ class _BerandaPageState extends State<BerandaPage> {
             ikon: Icons.account_balance_wallet,
             warna: Colors.green,
           ),
-          _buildStatCard(
-            judul: 'Catatan Waktu',
-            nilai: '$_totalCatatanWaktu Rekor',
-            subjudul: 'Tersimpan di database',
-            ikon: Icons.timer,
-            warna: Colors.orange,
-          ),
         ];
 
         return SingleChildScrollView(
@@ -141,7 +144,6 @@ class _BerandaPageState extends State<BerandaPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Banner Sambutan Responsif
               Container(
                 width: double.infinity,
                 padding: EdgeInsets.all(isMobile ? 20 : 24),
@@ -158,12 +160,12 @@ class _BerandaPageState extends State<BerandaPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Selamat Datang di Aqua Club Manager',
+                            'Dashboard Pembinaan Prestasi',
                             style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 6),
                           const Text(
-                            'Data atlet, jadwal, catatan waktu, dan iuran tersinkron otomatis dengan cloud.',
+                            'Database atlet per kelas, pelatih terdaftar, limit terbaik (PB), dan administrasi lomba.',
                             style: TextStyle(color: Colors.white70, fontSize: 13),
                           ),
                           const SizedBox(height: 16),
@@ -190,12 +192,12 @@ class _BerandaPageState extends State<BerandaPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Selamat Datang di Aqua Club Manager',
+                                  'Dashboard Pembinaan Prestasi Klub',
                                   style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
                                 ),
                                 SizedBox(height: 6),
                                 Text(
-                                  'Seluruh data atlet, jadwal latihan, catatan waktu, dan iuran tersinkron otomatis dengan cloud database.',
+                                  'Kelola database atlet tiap kelas, lisensi pelatih untuk pendaftaran kejuaraan, serta catatan limit terbaik (PB).',
                                   style: TextStyle(color: Colors.white70, fontSize: 14),
                                 ),
                               ],
@@ -217,8 +219,6 @@ class _BerandaPageState extends State<BerandaPage> {
                       ),
               ),
               const SizedBox(height: 20),
-
-              // Kartu Statistik Responsif (4 kolom di Desktop, 2x2 di Tablet, 1 kolom di HP)
               if (_isLoading)
                 const Padding(
                   padding: EdgeInsets.all(48),
@@ -269,10 +269,7 @@ class _BerandaPageState extends State<BerandaPage> {
                       kartuStatistik[3],
                     ],
                   ),
-
                 const SizedBox(height: 24),
-
-                // Panel Ringkasan Bawah Responsif
                 if (isDesktop)
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,

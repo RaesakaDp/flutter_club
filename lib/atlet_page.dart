@@ -5,14 +5,22 @@ import 'export_helper.dart';
 class Atlet {
   final int id;
   String nama;
+  String nik;
+  String jenisKelamin;
+  String tanggalLahir;
   String kelompokUmur;
+  String kelasLatihan;
   String gayaUtama;
   String status;
 
   Atlet({
     required this.id,
     required this.nama,
+    required this.nik,
+    required this.jenisKelamin,
+    required this.tanggalLahir,
     required this.kelompokUmur,
+    required this.kelasLatihan,
     required this.gayaUtama,
     required this.status,
   });
@@ -21,7 +29,11 @@ class Atlet {
     return Atlet(
       id: map['id'] ?? 0,
       nama: map['nama'] ?? '-',
+      nik: map['nik'] ?? '-',
+      jenisKelamin: map['jenis_kelamin'] ?? 'Putra',
+      tanggalLahir: map['tanggal_lahir'] ?? '-',
       kelompokUmur: map['kelompok_umur'] ?? 'KU-1',
+      kelasLatihan: map['kelas_latihan'] ?? 'Kelas Pembinaan',
       gayaUtama: map['gaya_utama'] ?? 'Gaya Bebas',
       status: map['status'] ?? 'Aktif',
     );
@@ -41,10 +53,18 @@ class _AtletPageState extends State<AtletPage> {
   bool _isLoading = true;
 
   String _kataKunciCari = '';
+  String _filterKelas = 'Semua';
   String _filterKU = 'Semua';
 
-  final List<String> _opsiKU = ['KU-1', 'KU-2', 'KU-3', 'Pemula'];
-  final List<String> _opsiGaya = ['Gaya Bebas', 'Gaya Dada', 'Gaya Punggung', 'Gaya Kupu-kupu'];
+  final List<String> _opsiKelas = [
+    'Kelas Prestasi Utama',
+    'Kelas Pra-Prestasi',
+    'Kelas Pembinaan',
+    'Kelas Pemula',
+  ];
+  final List<String> _opsiKU = ['Senior', 'KU-1', 'KU-2', 'KU-3', 'KU-4', 'Pemula'];
+  final List<String> _opsiJK = ['Putra', 'Putri'];
+  final List<String> _opsiGaya = ['Gaya Bebas', 'Gaya Dada', 'Gaya Punggung', 'Gaya Kupu-kupu', 'Gaya Ganti'];
   final List<String> _opsiStatus = ['Aktif', 'Cuti'];
 
   @override
@@ -86,31 +106,49 @@ class _AtletPageState extends State<AtletPage> {
     }
 
     final List<List> baris = [
-      ['ID Atlet', 'Nama Lengkap', 'Kelompok Umur', 'Gaya Spesialis', 'Status'],
+      ['ID Atlet', 'NIK', 'Nama Lengkap', 'L/P', 'Tanggal Lahir', 'Kelompok Umur', 'Kelas Latihan', 'Gaya Spesialis', 'Status'],
     ];
 
     for (final a in dataTampil) {
       final kode = 'ATL-${a.id.toString().padLeft(3, '0')}';
-      baris.add([kode, a.nama, a.kelompokUmur, a.gayaUtama, a.status]);
+      baris.add([
+        kode,
+        a.nik,
+        a.nama,
+        a.jenisKelamin,
+        a.tanggalLahir,
+        a.kelompokUmur,
+        a.kelasLatihan,
+        a.gayaUtama,
+        a.status,
+      ]);
     }
 
-    unduhFileCsv('data_atlet_aqua_club.csv', baris);
+    unduhFileCsv('database_atlet_pendaftaran.csv', baris);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('File Excel (CSV) data atlet berhasil diunduh!'), backgroundColor: Colors.green),
+      const SnackBar(content: Text('Data pendaftaran atlet (CSV) berhasil diunduh!'), backgroundColor: Colors.green),
     );
   }
 
   Future<void> _simpanKeDatabase({
     Atlet? atletEdit,
     required String nama,
+    required String nik,
+    required String jk,
+    required String tglLahir,
     required String ku,
+    required String kelas,
     required String gaya,
     required String status,
   }) async {
     try {
       final dataKirim = {
         'nama': nama,
+        'nik': nik.isEmpty ? '-' : nik,
+        'jenis_kelamin': jk,
+        'tanggal_lahir': tglLahir.isEmpty ? '-' : tglLahir,
         'kelompok_umur': ku,
+        'kelas_latihan': kelas,
         'gaya_utama': gaya,
         'status': status,
       };
@@ -161,17 +199,28 @@ class _AtletPageState extends State<AtletPage> {
     return _daftarAtlet.where((atlet) {
       final kodeAtlet = 'ATL-${atlet.id.toString().padLeft(3, '0')}';
       final cocokNama = atlet.nama.toLowerCase().contains(_kataKunciCari.toLowerCase()) ||
-          kodeAtlet.toLowerCase().contains(_kataKunciCari.toLowerCase());
+          kodeAtlet.toLowerCase().contains(_kataKunciCari.toLowerCase()) ||
+          atlet.nik.toLowerCase().contains(_kataKunciCari.toLowerCase());
+      final cocokKelas = _filterKelas == 'Semua' || atlet.kelasLatihan == _filterKelas;
       final cocokKU = _filterKU == 'Semua' || atlet.kelompokUmur == _filterKU;
-      return cocokNama && cocokKU;
+      return cocokNama && cocokKelas && cocokKU;
     }).toList();
   }
 
   void _tampilkanFormAtlet({Atlet? atletEdit}) {
     final isEdit = atletEdit != null;
     final namaController = TextEditingController(text: isEdit ? atletEdit.nama : '');
-    String pilihKU = isEdit ? atletEdit.kelompokUmur : _opsiKU.first;
-    String pilihGaya = isEdit ? atletEdit.gayaUtama : _opsiGaya.first;
+    final nikController = TextEditingController(text: isEdit && atletEdit.nik != '-' ? atletEdit.nik : '');
+    final tglLahirController = TextEditingController(
+      text: isEdit && atletEdit.tanggalLahir != '-' ? atletEdit.tanggalLahir : '',
+    );
+
+    String pilihJK = isEdit && _opsiJK.contains(atletEdit.jenisKelamin) ? atletEdit.jenisKelamin : _opsiJK.first;
+    String pilihKelas = isEdit && _opsiKelas.contains(atletEdit.kelasLatihan)
+        ? atletEdit.kelasLatihan
+        : _opsiKelas.first;
+    String pilihKU = isEdit && _opsiKU.contains(atletEdit.kelompokUmur) ? atletEdit.kelompokUmur : 'KU-2';
+    String pilihGaya = isEdit && _opsiGaya.contains(atletEdit.gayaUtama) ? atletEdit.gayaUtama : _opsiGaya.first;
     String pilihStatus = isEdit ? atletEdit.status : _opsiStatus.first;
 
     showDialog(
@@ -182,7 +231,7 @@ class _AtletPageState extends State<AtletPage> {
             return AlertDialog(
               title: Text(isEdit ? 'Edit Data Atlet' : 'Tambah Atlet Baru'),
               content: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
+                constraints: const BoxConstraints(maxWidth: 440),
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -190,40 +239,95 @@ class _AtletPageState extends State<AtletPage> {
                       TextField(
                         controller: namaController,
                         decoration: const InputDecoration(
-                          labelText: 'Nama Lengkap Atlet',
+                          labelText: 'Nama Lengkap Atlet (Sesuai Akta/KK)',
                           border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.person),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        initialValue: pilihKU,
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: nikController,
+                        keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
-                          labelText: 'Kelompok Umur (KU)',
+                          labelText: 'NIK Atlet (Untuk Pendaftaran Lomba)',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.badge_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: pilihJK,
+                              decoration: const InputDecoration(
+                                labelText: 'Putra / Putri',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: _opsiJK.map((jk) => DropdownMenuItem(value: jk, child: Text(jk))).toList(),
+                              onChanged: (val) => setDialogState(() => pilihJK = val!),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: tglLahirController,
+                              decoration: const InputDecoration(
+                                labelText: 'Tgl Lahir (DD/MM/YYYY)',
+                                hintText: '12/05/2013',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      DropdownButtonFormField<String>(
+                        initialValue: pilihKelas,
+                        decoration: const InputDecoration(
+                          labelText: 'Kelas Latihan / Tingkat Prestasi',
                           border: OutlineInputBorder(),
                         ),
-                        items: _opsiKU.map((ku) => DropdownMenuItem(value: ku, child: Text(ku))).toList(),
-                        onChanged: (val) => setDialogState(() => pilihKU = val!),
+                        items: _opsiKelas.map((kls) => DropdownMenuItem(value: kls, child: Text(kls))).toList(),
+                        onChanged: (val) => setDialogState(() => pilihKelas = val!),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: pilihKU,
+                              decoration: const InputDecoration(
+                                labelText: 'Kelompok Umur',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: _opsiKU.map((ku) => DropdownMenuItem(value: ku, child: Text(ku))).toList(),
+                              onChanged: (val) => setDialogState(() => pilihKU = val!),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: pilihStatus,
+                              decoration: const InputDecoration(
+                                labelText: 'Status',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: _opsiStatus.map((st) => DropdownMenuItem(value: st, child: Text(st))).toList(),
+                              onChanged: (val) => setDialogState(() => pilihStatus = val!),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
                       DropdownButtonFormField<String>(
                         initialValue: pilihGaya,
                         decoration: const InputDecoration(
-                          labelText: 'Gaya Spesialis',
+                          labelText: 'Nomor / Gaya Spesialis Utama',
                           border: OutlineInputBorder(),
                         ),
                         items: _opsiGaya.map((gaya) => DropdownMenuItem(value: gaya, child: Text(gaya))).toList(),
                         onChanged: (val) => setDialogState(() => pilihGaya = val!),
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        initialValue: pilihStatus,
-                        decoration: const InputDecoration(
-                          labelText: 'Status Keanggotaan',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: _opsiStatus.map((st) => DropdownMenuItem(value: st, child: Text(st))).toList(),
-                        onChanged: (val) => setDialogState(() => pilihStatus = val!),
                       ),
                     ],
                   ),
@@ -245,7 +349,11 @@ class _AtletPageState extends State<AtletPage> {
                     _simpanKeDatabase(
                       atletEdit: atletEdit,
                       nama: namaController.text.trim(),
+                      nik: nikController.text.trim(),
+                      jk: pilihJK,
+                      tglLahir: tglLahirController.text.trim(),
                       ku: pilihKU,
+                      kelas: pilihKelas,
                       gaya: pilihGaya,
                       status: pilihStatus,
                     );
@@ -258,6 +366,13 @@ class _AtletPageState extends State<AtletPage> {
         );
       },
     );
+  }
+
+  Color _warnaKelas(String kelas) {
+    if (kelas == 'Kelas Prestasi Utama') return Colors.indigo;
+    if (kelas == 'Kelas Pra-Prestasi') return const Color(0xFF0284C7);
+    if (kelas == 'Kelas Pembinaan') return Colors.teal;
+    return Colors.grey.shade700;
   }
 
   @override
@@ -273,17 +388,18 @@ class _AtletPageState extends State<AtletPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Filter Kelas, KU, Pencarian & Tombol Ekspor
               Wrap(
                 spacing: 12,
                 runSpacing: 12,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   SizedBox(
-                    width: isMobile ? double.infinity : 260,
+                    width: isMobile ? double.infinity : 250,
                     child: TextField(
                       onChanged: (value) => setState(() => _kataKunciCari = value),
                       decoration: InputDecoration(
-                        hintText: 'Cari nama atau ID atlet...',
+                        hintText: 'Cari nama, NIK, atau ID...',
                         prefixIcon: const Icon(Icons.search),
                         filled: true,
                         fillColor: Colors.white,
@@ -292,6 +408,23 @@ class _AtletPageState extends State<AtletPage> {
                           borderRadius: BorderRadius.circular(10),
                           borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
                         ),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF94A3B8)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _filterKelas,
+                        items: ['Semua', ..._opsiKelas]
+                            .map((kls) => DropdownMenuItem(value: kls, child: Text(kls == 'Semua' ? 'Kelas: Semua' : kls)))
+                            .toList(),
+                        onChanged: (val) => setState(() => _filterKelas = val!),
                       ),
                     ),
                   ),
@@ -320,7 +453,7 @@ class _AtletPageState extends State<AtletPage> {
                   OutlinedButton.icon(
                     onPressed: _eksporCsvAtlet,
                     icon: const Icon(Icons.download_rounded, size: 18),
-                    label: const Text('Ekspor Excel'),
+                    label: const Text('Ekspor Excel Lomba'),
                     style: OutlinedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: const Color(0xFF0F172A),
@@ -359,7 +492,7 @@ class _AtletPageState extends State<AtletPage> {
                             padding: EdgeInsets.all(40),
                             child: Center(
                               child: Text(
-                                'Belum ada data atlet di database. Klik "Tambah Atlet" untuk memulai.',
+                                'Belum ada data atlet pada filter ini. Klik "Tambah Atlet" untuk menambahkan.',
                                 textAlign: TextAlign.center,
                               ),
                             ),
@@ -375,9 +508,12 @@ class _AtletPageState extends State<AtletPage> {
                                 child: DataTable(
                                   headingRowColor: WidgetStateProperty.all(const Color(0xFFF1F5F9)),
                                   columns: const [
-                                    DataColumn(label: Text('ID Atlet', style: TextStyle(fontWeight: FontWeight.bold))),
-                                    DataColumn(label: Text('Nama Lengkap', style: TextStyle(fontWeight: FontWeight.bold))),
-                                    DataColumn(label: Text('Kelompok Umur', style: TextStyle(fontWeight: FontWeight.bold))),
+                                    DataColumn(label: Text('ID', style: TextStyle(fontWeight: FontWeight.bold))),
+                                    DataColumn(label: Text('Nama Atlet', style: TextStyle(fontWeight: FontWeight.bold))),
+                                    DataColumn(label: Text('NIK', style: TextStyle(fontWeight: FontWeight.bold))),
+                                    DataColumn(label: Text('L/P & Tgl Lahir', style: TextStyle(fontWeight: FontWeight.bold))),
+                                    DataColumn(label: Text('Kelas Latihan', style: TextStyle(fontWeight: FontWeight.bold))),
+                                    DataColumn(label: Text('KU', style: TextStyle(fontWeight: FontWeight.bold))),
                                     DataColumn(label: Text('Gaya Spesialis', style: TextStyle(fontWeight: FontWeight.bold))),
                                     DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
                                     DataColumn(label: Text('Aksi', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -385,11 +521,31 @@ class _AtletPageState extends State<AtletPage> {
                                   rows: dataTampil.map((atlet) {
                                     final isAktif = atlet.status == 'Aktif';
                                     final kodeAtlet = 'ATL-${atlet.id.toString().padLeft(3, '0')}';
+                                    final warnaKls = _warnaKelas(atlet.kelasLatihan);
                                     return DataRow(
                                       cells: [
                                         DataCell(Text(kodeAtlet, style: const TextStyle(fontWeight: FontWeight.w500))),
-                                        DataCell(Text(atlet.nama)),
-                                        DataCell(Text(atlet.kelompokUmur)),
+                                        DataCell(Text(atlet.nama, style: const TextStyle(fontWeight: FontWeight.w600))),
+                                        DataCell(Text(atlet.nik)),
+                                        DataCell(Text('${atlet.jenisKelamin} • ${atlet.tanggalLahir}')),
+                                        DataCell(
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: warnaKls.withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              atlet.kelasLatihan,
+                                              style: TextStyle(
+                                                color: warnaKls,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        DataCell(Text(atlet.kelompokUmur, style: const TextStyle(fontWeight: FontWeight.w600))),
                                         DataCell(Text(atlet.gayaUtama)),
                                         DataCell(
                                           Container(

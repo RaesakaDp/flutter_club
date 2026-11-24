@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'reset_password_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -10,27 +11,85 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _supabase = Supabase.instance.client;
-  final _formKey = GlobalKey<FormState>();
+  final _loginFormKey = GlobalKey<FormState>();
+  final _registerFormKey = GlobalKey<FormState>();
+
+  // Controller Login
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
+  // Controller Daftar Wali Atlet
+  final _regNamaWaliController = TextEditingController();
+  final _regNoHpController = TextEditingController();
+  final _regNamaAtletController = TextEditingController();
+  final _regEmailController = TextEditingController();
+  final _regPasswordController = TextEditingController();
+
+  bool _isRegisterMode = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
+  String? _successMessage;
+
+  List<String> _daftarNamaAtlet = [];
+  bool _inputAtletManual = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _muatDaftarAtlet();
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _regNamaWaliController.dispose();
+    _regNoHpController.dispose();
+    _regNamaAtletController.dispose();
+    _regEmailController.dispose();
+    _regPasswordController.dispose();
     super.dispose();
   }
 
+  Future<void> _muatDaftarAtlet() async {
+    try {
+      final response = await _supabase
+          .from('atlet')
+          .select('nama')
+          .order('nama', ascending: true);
+
+      final List data = response as List;
+      final namaList = data
+          .map((e) => (e['nama'] ?? '').toString().trim())
+          .where((n) => n.isNotEmpty)
+          .toSet()
+          .toList();
+
+      if (mounted) {
+        setState(() {
+          _daftarNamaAtlet = namaList;
+          if (_daftarNamaAtlet.isNotEmpty) {
+            _regNamaAtletController.text = _daftarNamaAtlet.first;
+          } else {
+            _inputAtletManual = true;
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _inputAtletManual = true);
+      }
+    }
+  }
+
   Future<void> _prosesLogin() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_loginFormKey.currentState!.validate()) return;
 
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _successMessage = null;
     });
 
     try {
@@ -38,7 +97,6 @@ class _LoginPageState extends State<LoginPage> {
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      // Perpindahan ke DashboardPage ditangani otomatis oleh StreamBuilder di main.dart
     } on AuthException catch (e) {
       setState(() {
         if (e.message.toLowerCase().contains('invalid login credentials')) {
@@ -47,7 +105,7 @@ class _LoginPageState extends State<LoginPage> {
           _errorMessage = e.message;
         }
       });
-    } catch (e) {
+    } catch (_) {
       setState(() {
         _errorMessage = 'Terjadi gangguan koneksi. Coba beberapa saat lagi.';
       });
@@ -58,70 +116,63 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  void _tampilkanDialogLupaSandi() {
-    final resetEmailController = TextEditingController(text: _emailController.text.trim());
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Text('Reset Kata Sandi Admin'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Masukkan email admin yang terdaftar. Tautan pemulihan sandi akan dikirim ke kotak masukmu.',
-              style: TextStyle(fontSize: 13, color: Colors.black54),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: resetEmailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: InputDecoration(
-                labelText: 'Email Admin',
-                prefixIcon: const Icon(Icons.email_outlined),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Batal'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0284C7),
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () async {
-              final email = resetEmailController.text.trim();
-              if (email.isEmpty) return;
-              Navigator.pop(context);
-              try {
-                await _supabase.auth.resetPasswordForEmail(email);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Tautan reset sandi telah dikirim ke $email'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Gagal mengirim email reset: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              }
-            },
-            child: const Text('Kirim Tautan'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _prosesDaftarWali() async {
+    if (!_registerFormKey.currentState!.validate()) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _successMessage = null;
+    });
+
+    final email = _regEmailController.text.trim().toLowerCase();
+    final password = _regPasswordController.text;
+    final namaWali = _regNamaWaliController.text.trim();
+    final noHp = _regNoHpController.text.trim();
+    final namaAtlet = _regNamaAtletController.text.trim();
+
+    try {
+      final authResponse = await _supabase.auth.signUp(
+        email: email,
+        password: password,
+      );
+
+      if (authResponse.user != null) {
+        await _supabase.from('profil_pengguna').upsert({
+          'email': email,
+          'nama_lengkap': namaWali,
+          'no_hp': noHp.isEmpty ? '-' : noHp,
+          'role': 'wali',
+          'nama_atlet_terkait': namaAtlet,
+          'status_akun': 'pending',
+        }, onConflict: 'email');
+
+        if (authResponse.session == null && mounted) {
+          setState(() {
+            _isRegisterMode = false;
+            _emailController.text = email;
+            _successMessage =
+                'Pendaftaran berhasil dikirim! Akunmu sedang menunggu konfirmasi Super Admin.';
+          });
+        }
+      }
+    } on AuthException catch (e) {
+      setState(() {
+        if (e.message.toLowerCase().contains('already registered')) {
+          _errorMessage = 'Email ini sudah terdaftar. Silakan pindah ke tab Masuk.';
+        } else {
+          _errorMessage = e.message;
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Gagal mendaftarkan akun: $e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override
@@ -134,22 +185,20 @@ class _LoginPageState extends State<LoginPage> {
           if (isDesktop) {
             return Row(
               children: [
-                // Panel Kiri: Branding & Informasi Interaktif
                 Expanded(
                   flex: 5,
                   child: _buildPanelBranding(),
                 ),
-                // Panel Kanan: Kartu Form Login
                 Expanded(
                   flex: 5,
                   child: Container(
                     color: const Color(0xFFF8FAFC),
                     child: Center(
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(40),
+                        padding: const EdgeInsets.all(36),
                         child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 420),
-                          child: _buildFormCard(isMobile: false),
+                          constraints: const BoxConstraints(maxWidth: 440),
+                          child: _buildAuthCard(isMobile: false),
                         ),
                       ),
                     ),
@@ -159,7 +208,6 @@ class _LoginPageState extends State<LoginPage> {
             );
           }
 
-          // Tampilan Mobile (HP / Tablet Kecil)
           return Container(
             width: double.infinity,
             height: double.infinity,
@@ -175,8 +223,8 @@ class _LoginPageState extends State<LoginPage> {
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 420),
-                    child: _buildFormCard(isMobile: true),
+                    constraints: const BoxConstraints(maxWidth: 440),
+                    child: _buildAuthCard(isMobile: true),
                   ),
                 ),
               ),
@@ -213,7 +261,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(width: 14),
               const Text(
-                'AQUA CLUB MANAGER',
+                'AQUA CLUB PRESTASI',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 20,
@@ -227,7 +275,7 @@ class _LoginPageState extends State<LoginPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Kelola Klub Renang Lebih Terukur & Terintegrasi',
+                'Sistem Pembinaan & Portal Wali Atlet Terpadu',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 34,
@@ -237,15 +285,15 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Pantau perkembangan catatan waktu atlet, atur jadwal lintasan kolam, dan kelola administrasi iuran dalam satu dashboard berbasis cloud.',
+                'Kelola data atlet tiap kelas, lisensi pelatih, limit terbaik kejuaraan (PB), serta transparansi iuran untuk wali atlet.',
                 style: TextStyle(color: Colors.white70, fontSize: 15, height: 1.6),
               ),
               const SizedBox(height: 32),
-              _buildFeatureBadge(Icons.cloud_done_outlined, 'Database Cloud Real-Time'),
+              _buildFeatureBadge(Icons.admin_panel_settings_outlined, 'Dashboard Terpisah: Admin, Pelatih & Wali'),
               const SizedBox(height: 12),
-              _buildFeatureBadge(Icons.devices_outlined, 'Akses Responsif di Laptop & HP'),
+              _buildFeatureBadge(Icons.how_to_reg_outlined, 'Pendaftaran Mandiri Wali dengan Verifikasi Admin'),
               const SizedBox(height: 12),
-              _buildFeatureBadge(Icons.verified_user_outlined, 'Akses Terlindungi Autentikasi Admin'),
+              _buildFeatureBadge(Icons.emoji_events_outlined, 'Pemantauan Limit Terbaik (PB) Real-Time'),
             ],
           ),
           const Text(
@@ -276,9 +324,9 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _buildFormCard({required bool isMobile}) {
+  Widget _buildAuthCard({required bool isMobile}) {
     return Container(
-      padding: EdgeInsets.all(isMobile ? 24 : 36),
+      padding: EdgeInsets.all(isMobile ? 22 : 34),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -290,76 +338,313 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ],
       ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (isMobile) ...[
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0F9FF),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(Icons.waves, color: Color(0xFF0284C7), size: 36),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (isMobile) ...[
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0F9FF),
+                  borderRadius: BorderRadius.circular(14),
                 ),
+                child: const Icon(Icons.waves, color: Color(0xFF0284C7), size: 32),
               ),
-              const SizedBox(height: 16),
-            ],
-            Text(
-              'Masuk ke Dashboard',
-              textAlign: isMobile ? TextAlign.center : TextAlign.left,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
             ),
-            const SizedBox(height: 6),
-            Text(
-              'Silakan masuk menggunakan akun Admin atau Pelatih Klub.',
-              textAlign: isMobile ? TextAlign.center : TextAlign.left,
-              style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-            ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 14),
+          ],
 
-            // Kotak Pesan Error Interaktif
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              child: _errorMessage != null
-                  ? Container(
-                      key: ValueKey(_errorMessage),
-                      margin: const EdgeInsets.only(bottom: 18),
-                      padding: const EdgeInsets.all(12),
+          // Pemilih Mode: Masuk vs Daftar Wali Atlet
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() {
+                      _isRegisterMode = false;
+                      _errorMessage = null;
+                    }),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.red.shade200),
+                        color: !_isRegisterMode ? Colors.white : Colors.transparent,
+                        borderRadius: BorderRadius.circular(9),
+                        boxShadow: !_isRegisterMode
+                            ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 6)]
+                            : [],
                       ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _errorMessage!,
-                              style: TextStyle(color: Colors.red.shade800, fontSize: 12.5),
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        'Masuk Akun',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13.5,
+                          color: !_isRegisterMode ? const Color(0xFF0284C7) : const Color(0xFF64748B),
+                        ),
                       ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() {
+                      _isRegisterMode = true;
+                      _errorMessage = null;
+                      _successMessage = null;
+                    }),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: _isRegisterMode ? Colors.white : Colors.transparent,
+                        borderRadius: BorderRadius.circular(9),
+                        boxShadow: _isRegisterMode
+                            ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 6)]
+                            : [],
+                      ),
+                      child: Text(
+                        'Daftar Wali Atlet',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13.5,
+                          color: _isRegisterMode ? const Color(0xFF4F46E5) : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 22),
+
+          Text(
+            _isRegisterMode ? 'Pendaftaran Wali Atlet' : 'Selamat Datang Kembali',
+            textAlign: isMobile ? TextAlign.center : TextAlign.left,
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _isRegisterMode
+                ? 'Buat akun untuk memantau limit & iuran anak. Akun akan aktif setelah dikonfirmasi Super Admin.'
+                : 'Masuk sebagai Admin Klub, Pelatih, atau Wali Atlet.',
+            textAlign: isMobile ? TextAlign.center : TextAlign.left,
+            style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+          ),
+          const SizedBox(height: 20),
+
+          // Notifikasi Sukses
+          if (_successMessage != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.green.shade300),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle_outline, color: Colors.green.shade700, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _successMessage!,
+                      style: TextStyle(color: Colors.green.shade800, fontSize: 12.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Notifikasi Error
+          if (_errorMessage != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _errorMessage!,
+                      style: TextStyle(color: Colors.red.shade800, fontSize: 12.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          if (!_isRegisterMode) _buildFormLogin() else _buildFormDaftarWali(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormLogin() {
+    return Form(
+      key: _loginFormKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextFormField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            decoration: InputDecoration(
+              labelText: 'Email Akun',
+              hintText: 'nama@email.com',
+              prefixIcon: const Icon(Icons.email_outlined),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+            ),
+            validator: (val) {
+              if (val == null || val.trim().isEmpty) return 'Email wajib diisi';
+              if (!val.contains('@')) return 'Format email tidak valid';
+              return null;
+            },
+          ),
+          const SizedBox(height: 14),
+          TextFormField(
+            controller: _passwordController,
+            obscureText: _obscurePassword,
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _prosesLogin(),
+            decoration: InputDecoration(
+              labelText: 'Kata Sandi',
+              prefixIcon: const Icon(Icons.lock_outline),
+              suffixIcon: IconButton(
+                icon: Icon(_obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+              ),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+            ),
+            validator: (val) {
+              if (val == null || val.isEmpty) return 'Kata sandi wajib diisi';
+              if (val.length < 6) return 'Kata sandi minimal 6 karakter';
+              return null;
+            },
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ResetPasswordPage(
+                      initialEmail: _emailController.text.trim(),
+                    ),
+                  ),
+                );
+              },
+              child: const Text(
+                'Lupa kata sandi?',
+                style: TextStyle(color: Color(0xFF0284C7), fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 48,
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _prosesLogin,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0284C7),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
                     )
-                  : const SizedBox.shrink(),
+                  : const Text('Masuk Sekarang', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
             ),
+          ),
+        ],
+      ),
+    );
+  }
 
-            // Input Email
-            TextFormField(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
+  Widget _buildFormDaftarWali() {
+    return Form(
+      key: _registerFormKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextFormField(
+            controller: _regNamaWaliController,
+            textInputAction: TextInputAction.next,
+            decoration: InputDecoration(
+              labelText: 'Nama Lengkap Orang Tua / Wali',
+              prefixIcon: const Icon(Icons.person_outline),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+            ),
+            validator: (val) => (val == null || val.trim().isEmpty) ? 'Nama wali wajib diisi' : null,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _regNoHpController,
+            keyboardType: TextInputType.phone,
+            textInputAction: TextInputAction.next,
+            decoration: InputDecoration(
+              labelText: 'Nomor WhatsApp / HP Aktif',
+              hintText: '0812xxxxxxxx',
+              prefixIcon: const Icon(Icons.phone_android),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+            ),
+            validator: (val) => (val == null || val.trim().isEmpty) ? 'Nomor WhatsApp wajib diisi untuk verifikasi' : null,
+          ),
+          const SizedBox(height: 12),
+
+          if (_daftarNamaAtlet.isNotEmpty && !_inputAtletManual) ...[
+            DropdownButtonFormField<String>(
+              initialValue: _daftarNamaAtlet.contains(_regNamaAtletController.text)
+                  ? _regNamaAtletController.text
+                  : _daftarNamaAtlet.first,
               decoration: InputDecoration(
-                labelText: 'Email Admin',
-                hintText: 'admin@aquaclub.com',
-                prefixIcon: const Icon(Icons.email_outlined),
+                labelText: 'Pilih Nama Atlet (Anak)',
+                prefixIcon: const Icon(Icons.pool),
                 filled: true,
                 fillColor: const Color(0xFFF8FAFC),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -368,86 +653,121 @@ class _LoginPageState extends State<LoginPage> {
                   borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
                 ),
               ),
-              validator: (val) {
-                if (val == null || val.trim().isEmpty) return 'Email wajib diisi';
-                if (!val.contains('@')) return 'Format email tidak valid';
-                return null;
-              },
+              items: _daftarNamaAtlet
+                  .map((nama) => DropdownMenuItem(value: nama, child: Text(nama)))
+                  .toList(),
+              onChanged: (val) => setState(() => _regNamaAtletController.text = val!),
             ),
-            const SizedBox(height: 16),
-
-            // Input Password
-            TextFormField(
-              controller: _passwordController,
-              obscureText: _obscurePassword,
-              textInputAction: TextInputAction.done,
-              onFieldSubmitted: (_) => _prosesLogin(),
-              decoration: InputDecoration(
-                labelText: 'Kata Sandi',
-                prefixIcon: const Icon(Icons.lock_outline),
-                suffixIcon: IconButton(
-                  icon: Icon(_obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                  tooltip: _obscurePassword ? 'Tampilkan sandi' : 'Sembunyikan sandi',
-                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                ),
-                filled: true,
-                fillColor: const Color(0xFFF8FAFC),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                ),
-              ),
-              validator: (val) {
-                if (val == null || val.isEmpty) return 'Kata sandi wajib diisi';
-                if (val.length < 6) return 'Kata sandi minimal 6 karakter';
-                return null;
-              },
-            ),
-            const SizedBox(height: 8),
-
-            // Tombol Lupa Kata Sandi
             Align(
               alignment: Alignment.centerRight,
               child: TextButton(
-                onPressed: _tampilkanDialogLupaSandi,
-                child: const Text(
-                  'Lupa kata sandi?',
-                  style: TextStyle(color: Color(0xFF0284C7), fontSize: 13, fontWeight: FontWeight.w600),
-                ),
+                onPressed: () => setState(() {
+                  _inputAtletManual = true;
+                  _regNamaAtletController.clear();
+                }),
+                child: const Text('Nama anak belum ada di daftar? Ketik manual', style: TextStyle(fontSize: 12)),
               ),
             ),
-            const SizedBox(height: 12),
-
-            // Tombol Masuk Interaktif
-            SizedBox(
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _prosesLogin,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0284C7),
-                  foregroundColor: Colors.white,
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ] else ...[
+            TextFormField(
+              controller: _regNamaAtletController,
+              textInputAction: TextInputAction.next,
+              decoration: InputDecoration(
+                labelText: 'Nama Lengkap Atlet (Anak)',
+                prefixIcon: const Icon(Icons.pool),
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
                 ),
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                      )
-                    : const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.login_rounded, size: 20),
-                          SizedBox(width: 8),
-                          Text('Masuk Sekarang', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
               ),
+              validator: (val) => (val == null || val.trim().isEmpty) ? 'Nama atlet wajib diisi' : null,
             ),
+            if (_daftarNamaAtlet.isNotEmpty)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => setState(() {
+                    _inputAtletManual = false;
+                    _regNamaAtletController.text = _daftarNamaAtlet.first;
+                  }),
+                  child: const Text('Pilih dari daftar atlet klub', style: TextStyle(fontSize: 12)),
+                ),
+              )
+            else
+              const SizedBox(height: 12),
           ],
-        ),
+
+          TextFormField(
+            controller: _regEmailController,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            decoration: InputDecoration(
+              labelText: 'Email untuk Login',
+              prefixIcon: const Icon(Icons.email_outlined),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+            ),
+            validator: (val) {
+              if (val == null || val.trim().isEmpty) return 'Email wajib diisi';
+              if (!val.contains('@')) return 'Format email tidak valid';
+              return null;
+            },
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _regPasswordController,
+            obscureText: _obscurePassword,
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _prosesDaftarWali(),
+            decoration: InputDecoration(
+              labelText: 'Buat Kata Sandi (Min. 6 karakter)',
+              prefixIcon: const Icon(Icons.lock_outline),
+              suffixIcon: IconButton(
+                icon: Icon(_obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+              ),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+            ),
+            validator: (val) {
+              if (val == null || val.isEmpty) return 'Kata sandi wajib diisi';
+              if (val.length < 6) return 'Kata sandi minimal 6 karakter';
+              return null;
+            },
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            height: 48,
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _prosesDaftarWali,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4F46E5),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                    )
+                  : const Text('Ajukan Pendaftaran Akun', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ],
       ),
     );
   }
