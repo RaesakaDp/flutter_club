@@ -4,6 +4,7 @@ import 'beranda_page.dart';
 import 'atlet_page.dart';
 import 'pelatih_page.dart';
 import 'jadwal_page.dart';
+import 'absensi_page.dart';
 import 'catatan_waktu_page.dart';
 import 'iuran_page.dart';
 import 'akun_pengguna_page.dart';
@@ -16,9 +17,9 @@ class DashboardPage extends StatefulWidget {
 
   const DashboardPage({
     super.key,
-    required this.role,
-    required this.namaPengguna,
-    required this.emailPengguna,
+    this.role = 'admin',
+    this.namaPengguna = 'Admin Klub',
+    this.emailPengguna = '',
   });
 
   @override
@@ -35,24 +36,33 @@ class _DashboardPageState extends State<DashboardPage> {
   Color get _warnaAksen => _isAdmin ? const Color(0xFF0284C7) : const Color(0xFF0D9488);
   Color get _warnaIkonLogo => _isAdmin ? const Color(0xFF38BDF8) : const Color(0xFF5EEAD4);
 
-  List get _menuItems {
+    List get _menuItems {
     if (_isAdmin) {
       return [
-        {'id': 'beranda', 'title': 'Beranda', 'icon': Icons.dashboard_rounded},
-        {'id': 'atlet', 'title': 'Data Atlet & Kelas', 'icon': Icons.pool_rounded},
-        {'id': 'pelatih', 'title': 'Data Pelatih', 'icon': Icons.sports_rounded},
-        {'id': 'jadwal', 'title': 'Jadwal Latihan', 'icon': Icons.calendar_month_rounded},
-        {'id': 'waktu', 'title': 'Limit & Catatan Waktu', 'icon': Icons.timer_rounded},
-        {'id': 'iuran', 'title': 'Iuran & Keuangan', 'icon': Icons.payments_rounded},
-        {'id': 'akun', 'title': 'Hak Akses Pengguna', 'icon': Icons.admin_panel_settings_rounded},
+        {'id': 'beranda', 'title': 'Beranda', 'short': 'Beranda', 'icon': Icons.dashboard_rounded},
+        {'id': 'atlet', 'title': 'Data Atlet & Kelas', 'short': 'Atlet', 'icon': Icons.pool_rounded},
+        {'id': 'absensi', 'title': 'Absensi Latihan', 'short': 'Absensi', 'icon': Icons.fact_check_rounded},
+        {'id': 'iuran', 'title': 'Iuran & Keuangan', 'short': 'Iuran', 'icon': Icons.payments_rounded},
+        {'id': 'pelatih', 'title': 'Data Pelatih', 'short': 'Pelatih', 'icon': Icons.sports_rounded},
+        {'id': 'jadwal', 'title': 'Jadwal Latihan', 'short': 'Jadwal', 'icon': Icons.calendar_month_rounded},
+        {'id': 'waktu', 'title': 'Limit & Catatan Waktu', 'short': 'Limit', 'icon': Icons.timer_rounded},
+        {'id': 'akun', 'title': 'Hak Akses Pengguna', 'short': 'Akses', 'icon': Icons.admin_panel_settings_rounded},
       ];
     } else {
       return [
-        {'id': 'beranda_pelatih', 'title': 'Beranda Pelatih', 'icon': Icons.dashboard_rounded},
-        {'id': 'atlet', 'title': 'Data Atlet & Kelas', 'icon': Icons.pool_rounded},
-        {'id': 'jadwal', 'title': 'Jadwal Latihan', 'icon': Icons.calendar_month_rounded},
-        {'id': 'waktu', 'title': 'Limit & Catatan Waktu', 'icon': Icons.timer_rounded},
+        {'id': 'beranda_pelatih', 'title': 'Beranda Pelatih', 'short': 'Beranda', 'icon': Icons.dashboard_rounded},
+        {'id': 'atlet', 'title': 'Data Atlet & Kelas', 'short': 'Atlet', 'icon': Icons.pool_rounded},
+        {'id': 'absensi', 'title': 'Absensi Latihan', 'short': 'Absensi', 'icon': Icons.fact_check_rounded},
+        {'id': 'waktu', 'title': 'Limit & Catatan Waktu', 'short': 'Limit', 'icon': Icons.timer_rounded},
+        {'id': 'jadwal', 'title': 'Jadwal Latihan', 'short': 'Jadwal', 'icon': Icons.calendar_month_rounded},
       ];
+    }
+  }
+
+  void _pindahKeMenuId(String id) {
+    final idx = _menuItems.indexWhere((m) => m['id'] == id);
+    if (idx != -1) {
+      setState(() => _selectedIndex = idx);
     }
   }
 
@@ -91,14 +101,44 @@ class _DashboardPageState extends State<DashboardPage> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = constraints.maxWidth < 850;
+        final bottomNavIndex = _selectedIndex < 4 ? _selectedIndex : 4;
 
         return Scaffold(
           key: _scaffoldKey,
           drawer: isMobile
               ? Drawer(
-                  width: 265,
+                  width: 270,
                   backgroundColor: _warnaSidebar,
                   child: SafeArea(child: _buildSidebarContent(isDrawer: true)),
+                )
+              : null,
+          bottomNavigationBar: isMobile
+              ? NavigationBar(
+                  height: 66,
+                  backgroundColor: Colors.white,
+                  elevation: 8,
+                  indicatorColor: _warnaAksen.withValues(alpha: 0.15),
+                  selectedIndex: bottomNavIndex,
+                  onDestinationSelected: (idx) {
+                    if (idx < 4) {
+                      setState(() => _selectedIndex = idx);
+                    } else {
+                      _scaffoldKey.currentState?.openDrawer();
+                    }
+                  },
+                  destinations: [
+                    for (int i = 0; i < 4; i++)
+                      NavigationDestination(
+                        icon: Icon(daftarMenu[i]['icon'] as IconData),
+                        selectedIcon: Icon(daftarMenu[i]['icon'] as IconData, color: _warnaAksen),
+                        label: daftarMenu[i]['short'] as String,
+                      ),
+                    NavigationDestination(
+                      icon: const Icon(Icons.grid_view_rounded),
+                      selectedIcon: Icon(Icons.grid_view_rounded, color: _warnaAksen),
+                      label: 'Lainnya',
+                    ),
+                  ],
                 )
               : null,
           body: Row(
@@ -113,8 +153,8 @@ class _DashboardPageState extends State<DashboardPage> {
                 child: Column(
                   children: [
                     Container(
-                      height: isMobile ? 64 : 70,
-                      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 32),
+                      height: isMobile ? 62 : 70,
+                      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 32),
                       decoration: const BoxDecoration(
                         color: Colors.white,
                         border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
@@ -126,17 +166,17 @@ class _DashboardPageState extends State<DashboardPage> {
                             if (isMobile) ...[
                               IconButton(
                                 icon: Icon(Icons.menu_rounded, color: _warnaSidebar, size: 26),
-                                tooltip: 'Buka Menu',
+                                tooltip: 'Buka Semua Menu',
                                 onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 4),
                             ],
                             Expanded(
                               child: Text(
-                                daftarMenu[_selectedIndex]['title'],
+                                daftarMenu[_selectedIndex]['title'] as String,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: isMobile ? 18 : 22,
+                                  fontSize: isMobile ? 17.5 : 22,
                                   fontWeight: FontWeight.bold,
                                   color: const Color(0xFF1E293B),
                                 ),
@@ -149,11 +189,11 @@ class _DashboardPageState extends State<DashboardPage> {
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
-                                _isAdmin ? 'MODE ADMIN' : 'MODE PELATIH',
+                                _isAdmin ? 'ADMIN' : 'PELATIH',
                                 style: TextStyle(
                                   color: _warnaAksen,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 11.5,
+                                  fontSize: 11,
                                   letterSpacing: 0.6,
                                 ),
                               ),
@@ -163,7 +203,13 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ),
                     Expanded(
-                      child: _buildBodyContent(daftarMenu[_selectedIndex]['id']),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 220),
+                        child: KeyedSubtree(
+                          key: ValueKey(daftarMenu[_selectedIndex]['id']),
+                          child: _buildBodyContent(daftarMenu[_selectedIndex]['id'] as String),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -181,7 +227,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+          padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 20),
           child: Row(
             children: [
               Icon(Icons.waves, color: _warnaIkonLogo, size: 32),
@@ -192,7 +238,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: 15.5,
+                    fontSize: 15,
                     letterSpacing: 1.1,
                   ),
                 ),
@@ -201,25 +247,25 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ),
         const Divider(color: Colors.white12, height: 1),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         Expanded(
           child: ListView.builder(
             itemCount: daftarMenu.length,
             itemBuilder: (context, index) {
               final isSelected = _selectedIndex == index;
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
                 child: ListTile(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
                   tileColor: isSelected ? _warnaAksen : Colors.transparent,
                   leading: Icon(
-                    daftarMenu[index]['icon'],
+                    daftarMenu[index]['icon'] as IconData,
                     color: isSelected ? Colors.white : Colors.white60,
                   ),
                   title: Text(
-                    daftarMenu[index]['title'],
+                    daftarMenu[index]['title'] as String,
                     style: TextStyle(
                       color: isSelected ? Colors.white : Colors.white70,
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -272,6 +318,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: () {
+                    if (isDrawer) Navigator.pop(context);
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -308,21 +355,42 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildBodyContent(String menuId) {
-    if (menuId == 'beranda') return const BerandaPage();
-    if (menuId == 'beranda_pelatih') return _BerandaPelatihView(namaPelatih: widget.namaPengguna);
-    if (menuId == 'atlet') return const AtletPage();
-    if (menuId == 'pelatih') return const PelatihPage();
-    if (menuId == 'jadwal') return const JadwalPage();
-    if (menuId == 'waktu') return const CatatanWaktuPage();
-    if (menuId == 'iuran') return const IuranPage();
-    if (menuId == 'akun') return const AkunPenggunaPage();
-    return const SizedBox();
+    switch (menuId) {
+      case 'beranda':
+        return BerandaPage();
+      case 'beranda_pelatih':
+        return _BerandaPelatihView(
+          namaPelatih: widget.namaPengguna,
+          onNavigateMenu: _pindahKeMenuId,
+        );
+      case 'atlet':
+        return AtletPage();
+      case 'pelatih':
+        return PelatihPage();
+      case 'jadwal':
+        return JadwalPage();
+      case 'absensi':
+        return AbsensiPage(namaPencatat: widget.namaPengguna);
+      case 'waktu':
+        return CatatanWaktuPage();
+      case 'iuran':
+        return IuranPage();
+      case 'akun':
+        return AkunPenggunaPage();
+      default:
+        return const SizedBox.shrink();
+    }
   }
 }
 
 class _BerandaPelatihView extends StatefulWidget {
   final String namaPelatih;
-  const _BerandaPelatihView({required this.namaPelatih});
+  final Function(String menuId) onNavigateMenu;
+
+  const _BerandaPelatihView({
+    required this.namaPelatih,
+    required this.onNavigateMenu,
+  });
 
   @override
   State<_BerandaPelatihView> createState() => _BerandaPelatihViewState();
@@ -357,93 +425,196 @@ class _BerandaPelatihViewState extends State<_BerandaPelatihView> {
         if ((a['kelas_latihan'] ?? '').toString().contains('Prestasi')) prestasi++;
       }
 
-      setState(() {
-        _totalAtlet = listAtlet.length;
-        _atletPrestasi = prestasi;
-        _totalSesi = (res[1] as List).length;
-        _totalRekor = (res[2] as List).length;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _totalAtlet = listAtlet.length;
+          _atletPrestasi = prestasi;
+          _totalSesi = (res[1] as List).length;
+          _totalRekor = (res[2] as List).length;
+          _loading = false;
+        });
+      }
     } catch (_) {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF064E3B), Color(0xFF0D9488)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(14),
+    return RefreshIndicator(
+      onRefresh: _muatRingkasanPelatih,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isMobile = constraints.maxWidth < 700;
+
+          final daftarKartu = [
+            _kartuPelatih(
+              'Total Atlet Binaan',
+              '$_totalAtlet Atlet',
+              '$_atletPrestasi atlet kelas prestasi',
+              Icons.pool,
+              const Color(0xFF0D9488),
+              () => widget.onNavigateMenu('atlet'),
             ),
+            _kartuPelatih(
+              'Jadwal Latihan',
+              '$_totalSesi Sesi',
+              'Terdaftar di kolam',
+              Icons.calendar_month,
+              Colors.indigo,
+              () => widget.onNavigateMenu('jadwal'),
+            ),
+            _kartuPelatih(
+              'Catatan Limit Waktu',
+              '$_totalRekor Rekor',
+              'Data time trial & lomba',
+              Icons.timer,
+              Colors.orange.shade800,
+              () => widget.onNavigateMenu('waktu'),
+            ),
+          ];
+
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.all(isMobile ? 16 : 28),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Selamat Bertugas, Coach ${widget.namaPelatih}',
-                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.all(isMobile ? 20 : 26),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF064E3B), Color(0xFF0D9488)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Selamat Bertugas, Coach ${widget.namaPelatih}',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: isMobile ? 18.5 : 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Catat absensi latihan harian, pantau performa atlet tiap kelas, dan perbarui limit terbaik (PB).',
+                        style: TextStyle(color: Colors.white70, fontSize: 13.5),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: () => widget.onNavigateMenu('absensi'),
+                            icon: const Icon(Icons.fact_check_rounded, size: 18),
+                            label: const Text('Mulai Absensi Hari Ini'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: const Color(0xFF064E3B),
+                              textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () => widget.onNavigateMenu('waktu'),
+                            icon: const Icon(Icons.timer_rounded, size: 18, color: Colors.white),
+                            label: const Text('Input Limit Waktu', style: TextStyle(color: Colors.white)),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Colors.white54),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Pantau performa atlet tiap kelas, atur jadwal latihan kolam, dan perbarui limit terbaik (PB) atlet.',
-                  style: TextStyle(color: Colors.white70, fontSize: 13.5),
-                ),
+                const SizedBox(height: 20),
+                if (_loading)
+                  const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
+                else if (isMobile)
+                  Column(
+                    children: [
+                      daftarKartu[0],
+                      const SizedBox(height: 12),
+                      daftarKartu[1],
+                      const SizedBox(height: 12),
+                      daftarKartu[2],
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(child: daftarKartu[0]),
+                      const SizedBox(width: 14),
+                      Expanded(child: daftarKartu[1]),
+                      const SizedBox(width: 14),
+                      Expanded(child: daftarKartu[2]),
+                    ],
+                  ),
               ],
             ),
-          ),
-          const SizedBox(height: 20),
-          if (_loading)
-            const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
-          else
-            Wrap(
-              spacing: 16,
-              runSpacing: 16,
-              children: [
-                _kartuPelatih('Total Atlet Binaan', '$_totalAtlet Atlet', '$_atletPrestasi atlet kelas prestasi', Icons.pool, const Color(0xFF0D9488)),
-                _kartuPelatih('Jadwal Latihan', '$_totalSesi Sesi', 'Terdaftar di kolam', Icons.calendar_month, Colors.indigo),
-                _kartuPelatih('Catatan Limit Waktu', '$_totalRekor Rekor', 'Data time trial & lomba', Icons.timer, Colors.orange),
-              ],
-            ),
-        ],
+          );
+        },
       ),
     );
   }
 
-  Widget _kartuPelatih(String judul, String nilai, String sub, IconData ikon, Color warna) {
-    return Container(
-      width: 280,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _kartuPelatih(
+    String judul,
+    String nilai,
+    String sub,
+    IconData ikon,
+    Color warna,
+    VoidCallback onTap,
+  ) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(judul, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w600, fontSize: 13)),
-              Icon(ikon, color: warna),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      judul,
+                      style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                  ),
+                  Icon(ikon, color: warna),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(nilai, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(child: Text(sub, style: const TextStyle(color: Colors.grey, fontSize: 12))),
+                  Icon(Icons.arrow_forward_ios_rounded, size: 13, color: warna),
+                ],
+              ),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(nilai, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text(sub, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-        ],
+        ),
       ),
     );
   }

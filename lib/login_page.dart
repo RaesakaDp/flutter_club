@@ -14,11 +14,9 @@ class _LoginPageState extends State<LoginPage> {
   final _loginFormKey = GlobalKey<FormState>();
   final _registerFormKey = GlobalKey<FormState>();
 
-  // Controller Login
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  // Controller Daftar Wali Atlet
   final _regNamaWaliController = TextEditingController();
   final _regNoHpController = TextEditingController();
   final _regNamaAtletController = TextEditingController();
@@ -185,10 +183,7 @@ class _LoginPageState extends State<LoginPage> {
           if (isDesktop) {
             return Row(
               children: [
-                Expanded(
-                  flex: 5,
-                  child: _buildPanelBranding(),
-                ),
+                Expanded(flex: 5, child: _buildPanelBranding()),
                 Expanded(
                   flex: 5,
                   child: Container(
@@ -221,7 +216,7 @@ class _LoginPageState extends State<LoginPage> {
             child: SafeArea(
               child: Center(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 440),
                     child: _buildAuthCard(isMobile: true),
@@ -285,15 +280,15 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Kelola data atlet tiap kelas, lisensi pelatih, limit terbaik kejuaraan (PB), serta transparansi iuran untuk wali atlet.',
+                'Kelola data atlet tiap kelas, absensi kolam harian, limit terbaik kejuaraan (PB), serta upload bukti transfer iuran.',
                 style: TextStyle(color: Colors.white70, fontSize: 15, height: 1.6),
               ),
               const SizedBox(height: 32),
               _buildFeatureBadge(Icons.admin_panel_settings_outlined, 'Dashboard Terpisah: Admin, Pelatih & Wali'),
               const SizedBox(height: 12),
-              _buildFeatureBadge(Icons.how_to_reg_outlined, 'Pendaftaran Mandiri Wali dengan Verifikasi Admin'),
+              _buildFeatureBadge(Icons.fact_check_outlined, 'Absensi Latihan Harian Real-Time'),
               const SizedBox(height: 12),
-              _buildFeatureBadge(Icons.emoji_events_outlined, 'Pemantauan Limit Terbaik (PB) Real-Time'),
+              _buildFeatureBadge(Icons.receipt_long_outlined, 'Upload & Verifikasi Bukti Transfer Iuran'),
             ],
           ),
           const Text(
@@ -326,13 +321,13 @@ class _LoginPageState extends State<LoginPage> {
 
   Widget _buildAuthCard({required bool isMobile}) {
     return Container(
-      padding: EdgeInsets.all(isMobile ? 22 : 34),
+      padding: EdgeInsets.all(isMobile ? 20 : 34),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 24,
             offset: const Offset(0, 10),
           ),
@@ -343,20 +338,33 @@ class _LoginPageState extends State<LoginPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (isMobile) ...[
-            Center(
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF0F9FF),
-                  borderRadius: BorderRadius.circular(14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0F9FF),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.waves, color: Color(0xFF0284C7), size: 26),
                 ),
-                child: const Icon(Icons.waves, color: Color(0xFF0284C7), size: 32),
-              ),
+                const SizedBox(width: 10),
+                const Text(
+                  'AQUA CLUB',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 17,
+                    letterSpacing: 1.1,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
           ],
 
-          // Pemilih Mode: Masuk vs Daftar Wali Atlet
+          // Tab Pemilih Mode
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
@@ -372,8 +380,8 @@ class _LoginPageState extends State<LoginPage> {
                       _errorMessage = null;
                     }),
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      duration: const Duration(milliseconds: 220),
+                      padding: const EdgeInsets.symmetric(vertical: 11),
                       decoration: BoxDecoration(
                         color: !_isRegisterMode ? Colors.white : Colors.transparent,
                         borderRadius: BorderRadius.circular(9),
@@ -401,8 +409,8 @@ class _LoginPageState extends State<LoginPage> {
                       _successMessage = null;
                     }),
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      duration: const Duration(milliseconds: 220),
+                      padding: const EdgeInsets.symmetric(vertical: 11),
                       decoration: BoxDecoration(
                         color: _isRegisterMode ? Colors.white : Colors.transparent,
                         borderRadius: BorderRadius.circular(9),
@@ -425,27 +433,26 @@ class _LoginPageState extends State<LoginPage> {
               ],
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 20),
 
           Text(
             _isRegisterMode ? 'Pendaftaran Wali Atlet' : 'Selamat Datang Kembali',
             textAlign: isMobile ? TextAlign.center : TextAlign.left,
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+            style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
           ),
           const SizedBox(height: 4),
           Text(
             _isRegisterMode
-                ? 'Buat akun untuk memantau limit & iuran anak. Akun akan aktif setelah dikonfirmasi Super Admin.'
+                ? 'Buat akun untuk memantau limit, absensi & iuran anak.'
                 : 'Masuk sebagai Admin Klub, Pelatih, atau Wali Atlet.',
             textAlign: isMobile ? TextAlign.center : TextAlign.left,
             style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
 
-          // Notifikasi Sukses
           if (_successMessage != null)
             Container(
-              margin: const EdgeInsets.only(bottom: 16),
+              margin: const EdgeInsets.only(bottom: 14),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.green.shade50,
@@ -466,10 +473,9 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
 
-          // Notifikasi Error
           if (_errorMessage != null)
             Container(
-              margin: const EdgeInsets.only(bottom: 16),
+              margin: const EdgeInsets.only(bottom: 14),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.red.shade50,
@@ -490,7 +496,12 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
 
-          if (!_isRegisterMode) _buildFormLogin() else _buildFormDaftarWali(),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: !_isRegisterMode
+                ? KeyedSubtree(key: const ValueKey('login'), child: _buildFormLogin())
+                : KeyedSubtree(key: const ValueKey('register'), child: _buildFormDaftarWali()),
+          ),
         ],
       ),
     );
@@ -570,9 +581,9 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           SizedBox(
-            height: 48,
+            height: 50,
             child: ElevatedButton(
               onPressed: _isLoading ? null : _prosesLogin,
               style: ElevatedButton.styleFrom(
@@ -586,7 +597,7 @@ class _LoginPageState extends State<LoginPage> {
                       height: 22,
                       child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
                     )
-                  : const Text('Masuk Sekarang', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  : const Text('Masuk Sekarang', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold)),
             ),
           ),
         ],
@@ -633,12 +644,13 @@ class _LoginPageState extends State<LoginPage> {
                 borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
               ),
             ),
-            validator: (val) => (val == null || val.trim().isEmpty) ? 'Nomor WhatsApp wajib diisi untuk verifikasi' : null,
+            validator: (val) => (val == null || val.trim().isEmpty) ? 'Nomor WhatsApp wajib diisi' : null,
           ),
           const SizedBox(height: 12),
 
           if (_daftarNamaAtlet.isNotEmpty && !_inputAtletManual) ...[
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: _daftarNamaAtlet.contains(_regNamaAtletController.text)
                   ? _regNamaAtletController.text
                   : _daftarNamaAtlet.first,
@@ -654,7 +666,10 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               items: _daftarNamaAtlet
-                  .map((nama) => DropdownMenuItem(value: nama, child: Text(nama)))
+                  .map((nama) => DropdownMenuItem(
+                        value: nama,
+                        child: Text(nama, overflow: TextOverflow.ellipsis),
+                      ))
                   .toList(),
               onChanged: (val) => setState(() => _regNamaAtletController.text = val!),
             ),
@@ -750,7 +765,7 @@ class _LoginPageState extends State<LoginPage> {
           ),
           const SizedBox(height: 18),
           SizedBox(
-            height: 48,
+            height: 50,
             child: ElevatedButton(
               onPressed: _isLoading ? null : _prosesDaftarWali,
               style: ElevatedButton.styleFrom(
@@ -764,7 +779,7 @@ class _LoginPageState extends State<LoginPage> {
                       height: 22,
                       child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
                     )
-                  : const Text('Ajukan Pendaftaran Akun', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  : const Text('Ajukan Pendaftaran Akun', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold)),
             ),
           ),
         ],

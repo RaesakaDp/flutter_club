@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -22,10 +23,12 @@ class WaliPortalPage extends StatefulWidget {
 class _WaliPortalPageState extends State<WaliPortalPage> {
   final _supabase = Supabase.instance.client;
   bool _isLoading = true;
+  int? _uploadingTagihanId;
   int _tabIndex = 0;
 
   List _semuaAtlet = [];
   List _semuaWaktu = [];
+  List _semuaAbsensi = [];
   List _semuaJadwal = [];
   List _semuaIuran = [];
 
@@ -44,6 +47,7 @@ class _WaliPortalPageState extends State<WaliPortalPage> {
       final results = await Future.wait([
         _supabase.from('atlet').select().order('nama', ascending: true),
         _supabase.from('catatan_waktu').select().order('id', ascending: false),
+        _supabase.from('absensi_latihan').select().order('tanggal', ascending: false),
         _supabase.from('jadwal_latihan').select().order('id', ascending: true),
         _supabase.from('tagihan_iuran').select().order('id', ascending: false),
       ]);
@@ -57,8 +61,9 @@ class _WaliPortalPageState extends State<WaliPortalPage> {
       setState(() {
         _semuaAtlet = listAtlet;
         _semuaWaktu = results[1] as List;
-        _semuaJadwal = results[2] as List;
-        _semuaIuran = results[3] as List;
+        _semuaAbsensi = results[2] as List;
+        _semuaJadwal = results[3] as List;
+        _semuaIuran = results[4] as List;
         _atletTerpilih = pilihAwal;
         _isLoading = false;
       });
@@ -96,6 +101,13 @@ class _WaliPortalPageState extends State<WaliPortalPage> {
     return pbMap.values.toList();
   }
 
+  List get _absensiAnak {
+    return _semuaAbsensi.where((a) {
+      final nama = (a['nama_atlet'] ?? '').toString().trim().toLowerCase();
+      return nama == _atletTerpilih.trim().toLowerCase();
+    }).toList();
+  }
+
   List get _tagihanAnak {
     return _semuaIuran.where((t) {
       final nama = (t['nama_atlet'] ?? '').toString().trim().toLowerCase();
@@ -115,11 +127,71 @@ class _WaliPortalPageState extends State<WaliPortalPage> {
     await _supabase.auth.signOut();
   }
 
-  void _lihatKwitansi(Map item) {
+  Future<void> _uploadBuktiTransfer(Map item) async {
+    final tagihanId = item['id'] as int;
+
+    try {
+      final picked = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+      );
+
+      if (picked.isEmpty) return;
+      final file = picked.first;
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) return;
+
+      setState(() => _uploadingTagihanId = tagihanId);
+
+      final ext = file.name.contains('.')
+          ? file.name.split('.').last.toLowerCase()
+          : 'jpg';
+      final contentType = ext == 'pdf'
+          ? 'application/pdf'
+          : (ext == 'png' ? 'image/png' : 'image/jpeg');
+      final namaFile = 'tagihan_${tagihanId}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+
+      await _supabase.storage.from('bukti_transfer').uploadBinary(
+            namaFile,
+            bytes,
+            fileOptions: FileOptions(contentType: contentType, upsert: true),
+          );
+
+      final publicUrl = _supabase.storage.from('bukti_transfer').getPublicUrl(namaFile);
+
+      await _supabase.from('tagihan_iuran').update({
+        'bukti_transfer_url': publicUrl,
+        'status_verifikasi': 'menunggu_verifikasi',
+        'catatan_pembayaran': '',
+      }).eq('id', tagihanId);
+
+      setState(() => _uploadingTagihanId = null);
+      await _muatDataPortal();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bukti transfer berhasil diunggah! Menunggu verifikasi Admin.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _uploadingTagihanId = null);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal mengunggah bukti transfer: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _lihatBuktiDanKwitansi(Map item, bool isMobile) {
     final kodeInv = 'INV-${(item['id'] ?? 0).toString().padLeft(3, '0')}';
     final isLunas = item['is_lunas'] == true;
     final nominal = (item['nominal'] as num?)?.toInt() ?? 0;
     final nominalTeks = _formatRupiah(nominal);
+    final buktiUrl = (item['bukti_transfer_url'] ?? '').toString();
 
     final pesanKonfirmasi = '''
 *KONFIRMASI IURAN - AQUA CLUB*
@@ -127,49 +199,100 @@ No. Invoice : $kodeInv
 Nama Atlet  : ${item['nama_atlet']} (${item['kelompok_umur']})
 Periode     : ${item['bulan']}
 Nominal     : $nominalTeks
-Status      : ${isLunas ? 'LUNAS' : 'BELUM LUNAS'}
+Status      : ${isLunas ? 'LUNAS' : 'MENUNGGU VERIFIKASI'}
 Tgl Bayar   : ${item['tanggal_bayar'] ?? '-'}''';
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Rincian Tagihan ($kodeInv)'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Atlet: ${item['nama_atlet']} (${item['kelompok_umur']})'),
-            const SizedBox(height: 6),
-            Text('Periode: ${item['bulan']}'),
-            const SizedBox(height: 6),
-            Text('Nominal: $nominalTeks', style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            Text('Status: ${isLunas ? 'LUNAS (${item['tanggal_bayar']})' : 'BELUM LUNAS'}'),
+    Widget kontenRincian() {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Rincian Tagihan ($kodeInv)', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          Text('Atlet: ${item['nama_atlet']} (${item['kelompok_umur']})'),
+          const SizedBox(height: 6),
+          Text('Periode: ${item['bulan']}'),
+          const SizedBox(height: 6),
+          Text('Nominal: $nominalTeks', style: const TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Text('Status: ${isLunas ? 'LUNAS (${item['tanggal_bayar']})' : 'Menunggu Verifikasi Admin'}'),
+          if (buktiUrl.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            const Text('Bukti Transfer Terunggah:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(maxHeight: 260),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFCBD5E1)),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.network(
+                  buktiUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: Text('Bukti transfer tersimpan (Format PDF)')),
+                  ),
+                ),
+              ),
+            ),
           ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Tutup')),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4F46E5), foregroundColor: Colors.white),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: pesanKonfirmasi));
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Rincian disalin untuk dikirim ke Admin via WhatsApp!')),
-              );
-            },
-            icon: const Icon(Icons.copy, size: 16),
-            label: const Text('Salin Rincian'),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Tutup')),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4F46E5), foregroundColor: Colors.white),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: pesanKonfirmasi));
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Rincian disalin!')),
+                  );
+                },
+                icon: const Icon(Icons.copy, size: 16),
+                label: const Text('Salin Rincian'),
+              ),
+            ],
           ),
         ],
-      ),
-    );
+      );
+    }
+
+    if (isMobile) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        builder: (context) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+          child: SingleChildScrollView(child: kontenRincian()),
+        ),
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: SingleChildScrollView(child: kontenRincian()),
+          ),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final profilAtlet = _profilAtletAktif;
     final listPB = _limitTerbaikAnak;
+    final listAbsensi = _absensiAnak;
     final listTagihan = _tagihanAnak;
 
     return Scaffold(
@@ -182,7 +305,7 @@ Tgl Bayar   : ${item['tanggal_bayar'] ?? '-'}''';
           children: [
             Icon(Icons.waves, color: Color(0xFF818CF8)),
             SizedBox(width: 10),
-            Text('Portal Wali Atlet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text('Portal Wali Atlet', style: TextStyle(fontSize: 17.5, fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [
@@ -203,12 +326,12 @@ Tgl Bayar   : ${item['tanggal_bayar'] ?? '-'}''';
             icon: const Icon(Icons.lock_reset_rounded),
             tooltip: 'Ganti Kata Sandi',
           ),
-          TextButton.icon(
+          IconButton(
             onPressed: _logout,
-            icon: const Icon(Icons.logout, color: Colors.redAccent, size: 18),
-            label: const Text('Keluar', style: TextStyle(color: Colors.redAccent)),
+            icon: const Icon(Icons.logout, color: Colors.redAccent),
+            tooltip: 'Keluar',
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
         ],
       ),
       body: _isLoading
@@ -217,152 +340,183 @@ Tgl Bayar   : ${item['tanggal_bayar'] ?? '-'}''';
               builder: (context, constraints) {
                 final isMobile = constraints.maxWidth < 700;
 
-                return SingleChildScrollView(
-                  padding: EdgeInsets.all(isMobile ? 16 : 32),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1000),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: double.infinity,
-                            padding: EdgeInsets.all(isMobile ? 20 : 26),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF1E1B4B), Color(0xFF4F46E5)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
+                return RefreshIndicator(
+                  onRefresh: _muatDataPortal,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.all(isMobile ? 16 : 32),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1000),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Kartu Identitas Wali & Atlet
+                            Container(
+                              width: double.infinity,
+                              padding: EdgeInsets.all(isMobile ? 18 : 26),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF1E1B4B), Color(0xFF4F46E5)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: BorderRadius.circular(18),
                               ),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Halo, ${widget.namaWali}',
-                                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Pantau perkembangan limit renang, jadwal latihan, dan status administrasi atlet.',
-                                  style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 13),
-                                ),
-                                const SizedBox(height: 18),
-                                if (widget.namaAtletTerkait.isEmpty && _semuaAtlet.isNotEmpty)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                                    decoration: BoxDecoration(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Halo, ${widget.namaWali}',
+                                    style: TextStyle(
                                       color: Colors.white,
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: DropdownButtonHideUnderline(
-                                      child: DropdownButton<String>(
-                                        value: _atletTerpilih,
-                                        isExpanded: true,
-                                        items: _semuaAtlet
-                                            .map((a) => DropdownMenuItem<String>(
-                                                  value: (a['nama'] ?? '').toString(),
-                                                  child: Text('Atlet: ${a['nama']} (${a['kelompok_umur']})'),
-                                                ))
-                                            .toList(),
-                                        onChanged: (val) => setState(() => _atletTerpilih = val!),
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  Container(
-                                    padding: const EdgeInsets.all(14),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const CircleAvatar(
-                                          backgroundColor: Colors.white,
-                                          child: Icon(Icons.pool, color: Color(0xFF4F46E5)),
-                                        ),
-                                        const SizedBox(width: 14),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                _atletTerpilih.isEmpty ? 'Atlet Belum Ditautkan' : _atletTerpilih,
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 16,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                profilAtlet != null
-                                                    ? '${profilAtlet['kelas_latihan']} • ${profilAtlet['kelompok_umur']} • Spesialis ${profilAtlet['gaya_utama']}'
-                                                    : 'Hubungi admin klub untuk menautkan profil atlet.',
-                                                style: const TextStyle(color: Colors.white70, fontSize: 12.5),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
+                                      fontSize: isMobile ? 18.5 : 21,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                              ],
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Pantau limit renang, kehadiran latihan harian, dan pembayaran iuran atlet.',
+                                    style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 13),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  if (widget.namaAtletTerkait.isEmpty && _semuaAtlet.isNotEmpty)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: DropdownButtonHideUnderline(
+                                        child: DropdownButton<String>(
+                                          value: _atletTerpilih,
+                                          isExpanded: true,
+                                          items: _semuaAtlet
+                                              .map((a) => DropdownMenuItem<String>(
+                                                    value: (a['nama'] ?? '').toString(),
+                                                    child: Text('Atlet: ${a['nama']} (${a['kelompok_umur']})',
+                                                        overflow: TextOverflow.ellipsis),
+                                                  ))
+                                              .toList(),
+                                          onChanged: (val) => setState(() => _atletTerpilih = val!),
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    Container(
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const CircleAvatar(
+                                            backgroundColor: Colors.white,
+                                            child: Icon(Icons.pool, color: Color(0xFF4F46E5)),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  _atletTerpilih.isEmpty ? 'Atlet Belum Ditautkan' : _atletTerpilih,
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 15.5,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  profilAtlet != null
+                                                      ? '${profilAtlet['kelas_latihan']} • ${profilAtlet['kelompok_umur']} • ${profilAtlet['gaya_utama']}'
+                                                      : 'Hubungi admin klub untuk menautkan profil atlet.',
+                                                  style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 20),
+                            const SizedBox(height: 18),
 
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: [
-                              ChoiceChip(
-                                label: Text('Limit Terbaik Anak (${listPB.length})'),
-                                selected: _tabIndex == 0,
-                                selectedColor: const Color(0xFF4F46E5),
-                                labelStyle: TextStyle(
-                                  color: _tabIndex == 0 ? Colors.white : const Color(0xFF1E293B),
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                onSelected: (_) => setState(() => _tabIndex = 0),
+                            // Bilah Navigasi Tab Scrollable untuk HP
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: [
+                                  _tabPill(0, Icons.emoji_events_outlined, 'Limit (${listPB.length})'),
+                                  const SizedBox(width: 8),
+                                  _tabPill(1, Icons.fact_check_outlined, 'Absensi (${listAbsensi.length})'),
+                                  const SizedBox(width: 8),
+                                  _tabPill(2, Icons.calendar_month_outlined, 'Jadwal (${_semuaJadwal.length})'),
+                                  const SizedBox(width: 8),
+                                  _tabPill(3, Icons.payments_outlined, 'Iuran (${listTagihan.length})'),
+                                ],
                               ),
-                              ChoiceChip(
-                                label: Text('Jadwal Latihan (${_semuaJadwal.length})'),
-                                selected: _tabIndex == 1,
-                                selectedColor: const Color(0xFF4F46E5),
-                                labelStyle: TextStyle(
-                                  color: _tabIndex == 1 ? Colors.white : const Color(0xFF1E293B),
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                onSelected: (_) => setState(() => _tabIndex = 1),
-                              ),
-                              ChoiceChip(
-                                label: Text('Status Iuran (${listTagihan.length})'),
-                                selected: _tabIndex == 2,
-                                selectedColor: const Color(0xFF4F46E5),
-                                labelStyle: TextStyle(
-                                  color: _tabIndex == 2 ? Colors.white : const Color(0xFF1E293B),
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                onSelected: (_) => setState(() => _tabIndex = 2),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
+                            ),
+                            const SizedBox(height: 18),
 
-                          if (_tabIndex == 0) _buildTabLimitAnak(listPB),
-                          if (_tabIndex == 1) _buildTabJadwalKlub(),
-                          if (_tabIndex == 2) _buildTabIuranAnak(listTagihan),
-                        ],
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 220),
+                              child: KeyedSubtree(
+                                key: ValueKey(_tabIndex),
+                                child: _tabIndex == 0
+                                    ? _buildTabLimitAnak(listPB)
+                                    : _tabIndex == 1
+                                        ? _buildTabAbsensiAnak(listAbsensi)
+                                        : _tabIndex == 2
+                                            ? _buildTabJadwalKlub()
+                                            : _buildTabIuranAnak(listTagihan, isMobile),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 );
               },
             ),
+    );
+  }
+
+  Widget _tabPill(int idx, IconData icon, String label) {
+    final selected = _tabIndex == idx;
+    return InkWell(
+      onTap: () => setState(() => _tabIndex = idx),
+      borderRadius: BorderRadius.circular(24),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF4F46E5) : Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: selected ? const Color(0xFF4F46E5) : const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 17, color: selected ? Colors.white : const Color(0xFF475569)),
+            const SizedBox(width: 7),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? Colors.white : const Color(0xFF1E293B),
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -384,10 +538,10 @@ Tgl Bayar   : ${item['tanggal_bayar'] ?? '-'}''';
         final lolos = punyaTarget && detik <= target;
 
         return Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
           child: Row(
@@ -396,19 +550,19 @@ Tgl Bayar   : ${item['tanggal_bayar'] ?? '-'}''';
                 backgroundColor: Color(0xFFEEF2FF),
                 child: Icon(Icons.emoji_events, color: Color(0xFF4F46E5)),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       (item['nomor_lomba'] ?? '-').toString(),
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Tercapai pada ${item['tanggal_tes']}${punyaTarget ? ' • Target Limit: $target dtk' : ''}',
-                      style: const TextStyle(color: Colors.grey, fontSize: 12.5),
+                      'Tgl ${item['tanggal_tes']}${punyaTarget ? ' • Limit: $target dtk' : ''}',
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
                     ),
                   ],
                 ),
@@ -418,7 +572,7 @@ Tgl Bayar   : ${item['tanggal_bayar'] ?? '-'}''';
                 children: [
                   Text(
                     '$detik dtk',
-                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF4F46E5)),
+                    style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold, color: Color(0xFF4F46E5)),
                   ),
                   if (punyaTarget) ...[
                     const SizedBox(height: 4),
@@ -447,6 +601,154 @@ Tgl Bayar   : ${item['tanggal_bayar'] ?? '-'}''';
     );
   }
 
+  Widget _buildTabAbsensiAnak(List listAbsensi) {
+    if (listAbsensi.isEmpty) {
+      return _buildEmptyBox('Belum ada catatan absensi latihan untuk $_atletTerpilih.');
+    }
+
+    int hadir = 0, izin = 0, sakit = 0, alpa = 0;
+    for (final a in listAbsensi) {
+      final st = (a['status'] ?? '').toString();
+      if (st == 'Hadir') hadir++;
+      if (st == 'Izin') izin++;
+      if (st == 'Sakit') sakit++;
+      if (st == 'Alpa') alpa++;
+    }
+    final rasio = listAbsensi.isEmpty ? 0.0 : hadir / listAbsensi.length;
+    final persen = (rasio * 100).round();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Tingkat Kehadiran Latihan', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  Text(
+                    '$persen% ($hadir/${listAbsensi.length} sesi)',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF4F46E5)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0, end: rasio),
+                duration: const Duration(milliseconds: 450),
+                builder: (context, val, _) {
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: val,
+                      minHeight: 9,
+                      backgroundColor: const Color(0xFFE2E8F0),
+                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _chipAbsensi('Hadir: $hadir', Colors.green.shade700, Colors.green.shade50),
+                  _chipAbsensi('Izin: $izin', Colors.blue.shade700, Colors.blue.shade50),
+                  _chipAbsensi('Sakit: $sakit', Colors.orange.shade800, Colors.orange.shade50),
+                  _chipAbsensi('Alpa: $alpa', Colors.red.shade700, Colors.red.shade50),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: listAbsensi.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 10),
+          itemBuilder: (context, index) {
+            final item = listAbsensi[index];
+            final status = (item['status'] ?? 'Hadir').toString();
+            final catatan = (item['catatan'] ?? '').toString();
+
+            Color warna = Colors.green.shade700;
+            Color latar = Colors.green.shade50;
+            if (status == 'Izin') {
+              warna = Colors.blue.shade700;
+              latar = Colors.blue.shade50;
+            } else if (status == 'Sakit') {
+              warna = Colors.orange.shade800;
+              latar = Colors.orange.shade50;
+            } else if (status == 'Alpa') {
+              warna = Colors.red.shade700;
+              latar = Colors.red.shade50;
+            }
+
+            return Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${item['tanggal']} • ${item['sesi_label']}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        if (catatan.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Catatan pelatih: $catatan',
+                            style: const TextStyle(color: Colors.grey, fontSize: 12.5, fontStyle: FontStyle.italic),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    decoration: BoxDecoration(color: latar, borderRadius: BorderRadius.circular(20)),
+                    child: Text(
+                      status,
+                      style: TextStyle(color: warna, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _chipAbsensi(String teks, Color warna, Color latar) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(color: latar, borderRadius: BorderRadius.circular(20)),
+      child: Text(teks, style: TextStyle(color: warna, fontWeight: FontWeight.bold, fontSize: 12)),
+    );
+  }
+
   Widget _buildTabJadwalKlub() {
     if (_semuaJadwal.isEmpty) {
       return _buildEmptyBox('Belum ada jadwal latihan yang dipublikasikan.');
@@ -460,10 +762,10 @@ Tgl Bayar   : ${item['tanggal_bayar'] ?? '-'}''';
       itemBuilder: (context, index) {
         final j = _semuaJadwal[index];
         return Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
           child: Column(
@@ -472,9 +774,11 @@ Tgl Bayar   : ${item['tanggal_bayar'] ?? '-'}''';
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '${j['hari']} • ${j['jam']}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4F46E5)),
+                  Expanded(
+                    child: Text(
+                      '${j['hari']} • ${j['jam']}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4F46E5)),
+                    ),
                   ),
                   Chip(
                     label: Text((j['kelompok'] ?? '-').toString(), style: const TextStyle(fontSize: 11)),
@@ -496,7 +800,7 @@ Tgl Bayar   : ${item['tanggal_bayar'] ?? '-'}''';
     );
   }
 
-  Widget _buildTabIuranAnak(List listTagihan) {
+  Widget _buildTabIuranAnak(List listTagihan, bool isMobile) {
     if (listTagihan.isEmpty) {
       return _buildEmptyBox('Belum ada riwayat tagihan iuran untuk $_atletTerpilih.');
     }
@@ -509,53 +813,117 @@ Tgl Bayar   : ${item['tanggal_bayar'] ?? '-'}''';
       itemBuilder: (context, index) {
         final item = listTagihan[index] as Map;
         final isLunas = item['is_lunas'] == true;
+        final stVerif = (item['status_verifikasi'] ?? 'belum_bayar').toString();
+        final catatan = (item['catatan_pembayaran'] ?? '').toString();
         final nominal = (item['nominal'] as num?)?.toInt() ?? 0;
+        final isUploading = _uploadingTagihanId == item['id'];
+
+        Color warnaBadge = Colors.red.shade700;
+        Color latarBadge = Colors.red.shade50;
+        String labelStatus = 'Belum Lunas';
+
+        if (isLunas || stVerif == 'lunas') {
+          warnaBadge = Colors.green.shade700;
+          latarBadge = Colors.green.shade50;
+          labelStatus = 'Lunas';
+        } else if (stVerif == 'menunggu_verifikasi') {
+          warnaBadge = Colors.amber.shade900;
+          latarBadge = Colors.amber.shade50;
+          labelStatus = 'Menunggu Verifikasi';
+        } else if (stVerif == 'ditolak') {
+          warnaBadge = Colors.deepOrange.shade800;
+          latarBadge = Colors.deepOrange.shade50;
+          labelStatus = 'Ditolak - Unggah Ulang';
+        }
 
         return Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Iuran Bulan ${item['bulan']}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Iuran ${item['bulan']}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15.5),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_formatRupiah(nominal)} • ${isLunas ? 'Dibayar tgl ${item['tanggal_bayar']}' : 'Silakan unggah bukti transfer'}',
+                          style: const TextStyle(color: Colors.grey, fontSize: 12.5),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${_formatRupiah(nominal)} • ${isLunas ? 'Dibayar tgl ${item['tanggal_bayar']}' : 'Menunggu pembayaran'}',
-                      style: const TextStyle(color: Colors.grey, fontSize: 12.5),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(color: latarBadge, borderRadius: BorderRadius.circular(20)),
+                    child: Text(
+                      labelStatus,
+                      style: TextStyle(color: warnaBadge, fontWeight: FontWeight.bold, fontSize: 11.5),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isLunas ? Colors.green.shade50 : Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  isLunas ? 'Lunas' : 'Belum Lunas',
-                  style: TextStyle(
-                    color: isLunas ? Colors.green.shade700 : Colors.red.shade700,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
+
+              if (catatan.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Catatan Admin: $catatan',
+                    style: TextStyle(fontSize: 12.5, color: Colors.orange.shade900),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.receipt_long, color: Color(0xFF4F46E5)),
-                tooltip: 'Rincian / Kwitansi',
-                onPressed: () => _lihatKwitansi(item),
+              ],
+
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  if (!isLunas)
+                    ElevatedButton.icon(
+                      onPressed: isUploading ? null : () => _uploadBuktiTransfer(item),
+                      icon: isUploading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Icon(Icons.upload_file_rounded, size: 18),
+                      label: Text(
+                        isUploading
+                            ? 'Mengunggah...'
+                            : (stVerif == 'menunggu_verifikasi' ? 'Ganti Bukti Transfer' : 'Upload Bukti Transfer'),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF4F46E5),
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  OutlinedButton.icon(
+                    onPressed: () => _lihatBuktiDanKwitansi(item, isMobile),
+                    icon: const Icon(Icons.receipt_long, size: 18),
+                    label: const Text('Lihat Bukti & Rincian'),
+                  ),
+                ],
               ),
             ],
           ),
